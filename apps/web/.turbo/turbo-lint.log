@@ -1,0 +1,4 @@
+
+> @economysim/web@0.1.0 lint C:\EconomSim\apps\web
+> eslint . --max-warnings=0
+

@@ -1,0 +1,559 @@
+<!DOCTYPE html><!--cyog_eDMP_NoWKV6cCeqZ--><html lang="ru"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="/_next/static/css/8c8d5808de69fc82.css" data-precedence="next"/><link rel="preload" as="script" fetchPriority="low" href="/_next/static/chunks/webpack-2571d11f22135ae8.js"/><script src="/_next/static/chunks/1403cfaa-6db8521358bcd91a.js" async=""></script><script src="/_next/static/chunks/159-2398f495578bc26c.js" async=""></script><script src="/_next/static/chunks/main-app-d40e273a12f2ae5c.js" async=""></script><script src="/_next/static/chunks/548-d04bda09e59c1a60.js" async=""></script><script src="/_next/static/chunks/app/page-7ed9cc711c39b2fc.js" async=""></script><title>EconomySim Constructor</title><meta name="description" content="Developer constructor for EconomySim world data."/><script src="/_next/static/chunks/polyfills-42372ed130431b0a.js" noModule=""></script></head><body><div hidden=""><!--$--><!--/$--></div><main class="min-h-screen px-3 py-3 text-stone-100 sm:px-5 lg:px-6"><header class="grid gap-3 rounded-lg border border-economy-line bg-[#151512]/95 p-3 shadow-2xl lg:grid-cols-[1fr_auto]"><div><p class="text-xs font-semibold uppercase tracking-wide text-economy-teal">EconomySim Constructor</p><h1 class="mt-1 text-2xl font-bold text-stone-50">World Data Studio</h1></div><div class="flex flex-wrap items-center gap-2"><div class="flex min-h-11 items-center gap-2 rounded-md border border-[#3b3831] bg-black/25 px-3"><span class="text-stone-50"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-package h-4 w-4" aria-hidden="true"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><polyline points="3.29 7 12 12 20.71 7"></polyline><path d="m7.5 4.27 9 5.15"></path></svg></span><div><div class="text-[11px] uppercase tracking-wide text-stone-500">Products</div><div class="text-sm font-bold text-stone-50">3</div></div></div><div class="flex min-h-11 items-center gap-2 rounded-md border border-[#3b3831] bg-black/25 px-3"><span class="text-stone-50"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-workflow h-4 w-4" aria-hidden="true"><rect width="8" height="8" x="3" y="3" rx="2"></rect><path d="M7 11v4a2 2 0 0 0 2 2h4"></path><rect width="8" height="8" x="13" y="13" rx="2"></rect></svg></span><div><div class="text-[11px] uppercase tracking-wide text-stone-500">Chains</div><div class="text-sm font-bold text-stone-50">2</div></div></div><div class="flex min-h-11 items-center gap-2 rounded-md border border-[#3b3831] bg-black/25 px-3"><span class="text-economy-gold"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-triangle-alert h-4 w-4" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg></span><div><div class="text-[11px] uppercase tracking-wide text-stone-500">Warnings</div><div class="text-sm font-bold text-economy-gold">0</div></div></div><div class="flex min-h-11 items-center gap-2 rounded-md border border-[#3b3831] bg-black/25 px-3"><span class="text-economy-teal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-check h-4 w-4" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg></span><div><div class="text-[11px] uppercase tracking-wide text-stone-500">Errors</div><div class="text-sm font-bold text-economy-teal">0</div></div></div></div></header><div class="mt-3 grid gap-3 xl:grid-cols-[260px_minmax(0,1fr)_390px]"><aside class="grid content-start gap-3"><section class="rounded-lg border border-economy-line bg-[#171813]/95 p-3 shadow-xl"><div class="mb-3 flex items-center gap-2 border-b border-[#2f332c] pb-2 text-sm font-bold uppercase tracking-wide text-stone-300"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-braces h-4 w-4 text-economy-gold" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"></path><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"></path></svg>Sections</div><nav class="grid gap-2"><button class="flex min-h-10 items-center gap-2 rounded-md border px-3 text-left text-sm font-semibold transition border-economy-gold bg-economy-gold text-[#17110a]" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-package h-4 w-4" aria-hidden="true"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><polyline points="3.29 7 12 12 20.71 7"></polyline><path d="m7.5 4.27 9 5.15"></path></svg>Products</button><button class="flex min-h-10 items-center gap-2 rounded-md border px-3 text-left text-sm font-semibold transition border-[#3b3831] bg-black/25 text-stone-200 hover:border-economy-teal" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pickaxe h-4 w-4" aria-hidden="true"><path d="m14 13-8.381 8.38a1 1 0 0 1-3.001-3L11 9.999"></path><path d="M15.973 4.027A13 13 0 0 0 5.902 2.373c-1.398.342-1.092 2.158.277 2.601a19.9 19.9 0 0 1 5.822 3.024"></path><path d="M16.001 11.999a19.9 19.9 0 0 1 3.024 5.824c.444 1.369 2.26 1.676 2.603.278A13 13 0 0 0 20 8.069"></path><path d="M18.352 3.352a1.205 1.205 0 0 0-1.704 0l-5.296 5.296a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l5.296-5.296a1.205 1.205 0 0 0 0-1.704z"></path></svg>Resources</button><button class="flex min-h-10 items-center gap-2 rounded-md border px-3 text-left text-sm font-semibold transition border-[#3b3831] bg-black/25 text-stone-200 hover:border-economy-teal" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-workflow h-4 w-4" aria-hidden="true"><rect width="8" height="8" x="3" y="3" rx="2"></rect><path d="M7 11v4a2 2 0 0 0 2 2h4"></path><rect width="8" height="8" x="13" y="13" rx="2"></rect></svg>Production Chains</button><button class="flex min-h-10 items-center gap-2 rounded-md border px-3 text-left text-sm font-semibold transition border-[#3b3831] bg-black/25 text-stone-200 hover:border-economy-teal" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-building2 lucide-building-2 h-4 w-4" aria-hidden="true"><path d="M10 12h4"></path><path d="M10 8h4"></path><path d="M14 21v-3a2 2 0 0 0-4 0v3"></path><path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"></path><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"></path></svg>Buildings</button><button class="flex min-h-10 items-center gap-2 rounded-md border px-3 text-left text-sm font-semibold transition border-[#3b3831] bg-black/25 text-stone-200 hover:border-economy-teal" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-landmark h-4 w-4" aria-hidden="true"><path d="M10 18v-7"></path><path d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z"></path><path d="M14 18v-7"></path><path d="M18 18v-7"></path><path d="M3 22h18"></path><path d="M6 18v-7"></path></svg>Company Types</button><button class="flex min-h-10 items-center gap-2 rounded-md border px-3 text-left text-sm font-semibold transition border-[#3b3831] bg-black/25 text-stone-200 hover:border-economy-teal" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-scale h-4 w-4" aria-hidden="true"><path d="M12 3v18"></path><path d="m19 8 3 8a5 5 0 0 1-6 0zV7"></path><path d="M3 7h1a17 17 0 0 0 8-2 17 17 0 0 0 8 2h1"></path><path d="m5 8 3 8a5 5 0 0 1-6 0zV7"></path><path d="M7 21h10"></path></svg>Laws</button><button class="flex min-h-10 items-center gap-2 rounded-md border px-3 text-left text-sm font-semibold transition border-[#3b3831] bg-black/25 text-stone-200 hover:border-economy-teal" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-cpu h-4 w-4" aria-hidden="true"><path d="M12 20v2"></path><path d="M12 2v2"></path><path d="M17 20v2"></path><path d="M17 2v2"></path><path d="M2 12h2"></path><path d="M2 17h2"></path><path d="M2 7h2"></path><path d="M20 12h2"></path><path d="M20 17h2"></path><path d="M20 7h2"></path><path d="M7 20v2"></path><path d="M7 2v2"></path><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="8" y="8" width="8" height="8" rx="1"></rect></svg>Technologies</button></nav></section><section class="rounded-lg border border-economy-line bg-[#171813]/95 p-3 shadow-xl"><div class="mb-3 flex items-center gap-2 border-b border-[#2f332c] pb-2 text-sm font-bold uppercase tracking-wide text-stone-300"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-braces h-4 w-4 text-economy-gold" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"></path><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"></path></svg>Validation</div><div class="flex items-center gap-2 rounded-md border border-economy-teal/40 bg-economy-teal/10 p-3 text-sm text-economy-teal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-check h-4 w-4" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>Valid catalog</div></section><section class="rounded-lg border border-economy-line bg-[#171813]/95 p-3 shadow-xl"><div class="mb-3 flex items-center gap-2 border-b border-[#2f332c] pb-2 text-sm font-bold uppercase tracking-wide text-stone-300"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-braces h-4 w-4 text-economy-gold" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"></path><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"></path></svg>Infrastructure defaults</div><div class="grid gap-3"><label class="grid gap-1 text-sm text-stone-300">Road quality<input class="min-h-10 rounded-md border border-[#3b3831] bg-[#0d0f0d] px-3 text-stone-50 outline-none focus:border-economy-gold" max="1" min="0" step="0.01" type="number" value="0.68"/></label><label class="grid gap-1 text-sm text-stone-300">Rail quality<input class="min-h-10 rounded-md border border-[#3b3831] bg-[#0d0f0d] px-3 text-stone-50 outline-none focus:border-economy-gold" max="1" min="0" step="0.01" type="number" value="0.74"/></label><label class="grid gap-1 text-sm text-stone-300">Port quality<input class="min-h-10 rounded-md border border-[#3b3831] bg-[#0d0f0d] px-3 text-stone-50 outline-none focus:border-economy-gold" max="1" min="0" step="0.01" type="number" value="0.7"/></label><label class="grid gap-1 text-sm text-stone-300">Route capacity<input class="min-h-10 rounded-md border border-[#3b3831] bg-[#0d0f0d] px-3 text-stone-50 outline-none focus:border-economy-gold" min="1" step="1" type="number" value="40000"/></label><label class="grid gap-1 text-sm text-stone-300">Border delay<input class="min-h-10 rounded-md border border-[#3b3831] bg-[#0d0f0d] px-3 text-stone-50 outline-none focus:border-economy-gold" min="0" step="1" type="number" value="2"/></label><label class="grid gap-1 text-sm text-stone-300">Base cost<input class="min-h-10 rounded-md border border-[#3b3831] bg-[#0d0f0d] px-3 text-stone-50 outline-none focus:border-economy-gold" min="0" step="1" type="number" value="18"/></label></div></section></aside><section class="min-w-0"><div class="grid gap-3 lg:grid-cols-[280px_minmax(0,1fr)]"><section class="rounded-lg border border-economy-line bg-[#171813]/95 p-3 shadow-xl"><div class="mb-3 flex items-center gap-2 border-b border-[#2f332c] pb-2 text-sm font-bold uppercase tracking-wide text-stone-300"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-braces h-4 w-4 text-economy-gold" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"></path><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"></path></svg>Products</div><div class="grid gap-2"><button class="rounded-md border px-3 py-2 text-left transition border-economy-gold bg-economy-gold/15" type="button"><div class="font-semibold text-stone-50">Bread</div><div class="mt-1 text-xs text-stone-400">food / food</div></button><button class="rounded-md border px-3 py-2 text-left transition border-[#3b3831] bg-black/20 hover:border-economy-teal" type="button"><div class="font-semibold text-stone-50">Clinic Visit</div><div class="mt-1 text-xs text-stone-400">consumer / medicine</div></button><button class="rounded-md border px-3 py-2 text-left transition border-[#3b3831] bg-black/20 hover:border-economy-teal" type="button"><div class="font-semibold text-stone-50">Bus Ticket</div><div class="mt-1 text-xs text-stone-400">consumer / transport</div></button></div><button class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-bold transition border-economy-teal/70 bg-economy-teal text-[#06110f] hover:bg-[#6bcbbb] mt-3 w-full" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus h-4 w-4" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Add product</button></section><section class="rounded-lg border border-economy-line bg-[#171813]/95 p-3 shadow-xl"><div class="mb-3 flex items-center gap-2 border-b border-[#2f332c] pb-2 text-sm font-bold uppercase tracking-wide text-stone-300"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-braces h-4 w-4 text-economy-gold" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"></path><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"></path></svg>Product editor</div><div class="grid gap-3 md:grid-cols-2"><label class="grid gap-1 text-sm text-stone-300">Название<input class="min-h-10 rounded-md border border-[#3b3831] bg-[#0d0f0d] px-3 text-stone-50 outline-none focus:border-economy-gold" value="Bread"/></label><label class="grid gap-1 text-sm text-stone-300">Бренд/производитель<input class="min-h-10 rounded-md border border-[#3b3831] bg-[#0d0f0d] px-3 text-stone-50 outline-none focus:border-economy-gold" value="Harbor Bakery"/></label><label class="grid gap-1 text-sm text-stone-300">Категория<select class="min-h-10 rounded-md border border-[#3b3831] bg-[#0d0f0d] px-3 text-stone-50 outline-none focus:border-economy-gold"><option value="food" selected="">food</option><option value="energy">energy</option><option value="industrial">industrial</option><option value="consumer">consumer</option></select></label><label class="grid gap-1 text-sm text-stone-300">Потребность<select class="min-h-10 rounded-md border border-[#3b3831] bg-[#0d0f0d] px-3 text-stone-50 outline-none focus:border-economy-gold"><option value="food" selected="">food</option><option value="housing">housing</option><option value="transport">transport</option><option value="medicine">medicine</option><option value="entertainment">entertainment</option><option value="energy">energy</option></select></label><label class="grid gap-1 text-sm text-stone-300">Вес<input class="min-h-10 rounded-md border border-[#3b3831] bg-[#0d0f0d] px-3 text-stone-50 outline-none focus:border-economy-gold" min="0" step="1" type="number" value="0.5"/></label><label class="grid gap-1 text-sm text-stone-300">Объем<input class="min-h-10 rounded-md border border-[#3b3831] bg-[#0d0f0d] px-3 text-stone-50 outline-none focus:border-economy-gold" min="0" step="0.001" type="number" value="0.002"/></label><label class="grid gap-1 text-sm text-stone-300">Срок годности<input class="min-h-10 rounded-md border border-[#3b3831] bg-[#0d0f0d] px-3 text-stone-50 outline-none focus:border-economy-gold" min="0" step="1" type="number" value="3"/></label><label class="grid gap-1 text-sm text-stone-300">Качество<input class="min-h-10 rounded-md border border-[#3b3831] bg-[#0d0f0d] px-3 text-stone-50 outline-none focus:border-economy-gold" max="1" min="0" step="0.01" type="number" value="0.62"/></label><div class="md:col-span-2"><button class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-bold transition border-rose-400/70 bg-rose-500/20 text-rose-100 hover:bg-rose-500/30 " type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2 lucide-trash-2 h-4 w-4" aria-hidden="true"><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>Delete product</button></div></div></section></div></section><aside class="grid content-start gap-3"><section class="rounded-lg border border-economy-line bg-[#171813]/95 p-3 shadow-xl"><div class="mb-3 flex items-center gap-2 border-b border-[#2f332c] pb-2 text-sm font-bold uppercase tracking-wide text-stone-300"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-braces h-4 w-4 text-economy-gold" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"></path><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"></path></svg>Test mini-simulation</div><div class="rounded-md border border-[#3b3831] bg-black/20 p-3" data-testid="mini-simulation"><div class="mb-3 flex items-center justify-between gap-2"><div><div class="font-semibold text-stone-50">Bakery Line</div><div class="text-xs text-stone-400">Bread<!-- --> / <!-- -->10<!-- --> runs</div></div><span class="rounded px-2 py-1 text-xs font-bold bg-economy-teal/15 text-economy-teal">17 NCR</span></div><div class="grid gap-2 grid-cols-2"><div class="rounded-md border border-[#3b3831] bg-black/25 p-2"><div class="truncate text-[11px] uppercase tracking-wide text-stone-500">Cost</div><div class="mt-1 truncate text-sm font-bold text-stone-50">15 NCR</div></div><div class="rounded-md border border-[#3b3831] bg-black/25 p-2"><div class="truncate text-[11px] uppercase tracking-wide text-stone-500">Revenue</div><div class="mt-1 truncate text-sm font-bold text-stone-50">32 NCR</div></div><div class="rounded-md border border-[#3b3831] bg-black/25 p-2"><div class="truncate text-[11px] uppercase tracking-wide text-stone-500">Break-even</div><div class="mt-1 truncate text-sm font-bold text-stone-50">2 NCR</div></div><div class="rounded-md border border-[#3b3831] bg-black/25 p-2"><div class="truncate text-[11px] uppercase tracking-wide text-stone-500">Demand risk</div><div class="mt-1 truncate text-sm font-bold text-stone-50">low</div></div></div></div></section><section class="rounded-lg border border-economy-line bg-[#171813]/95 p-3 shadow-xl"><div class="mb-3 flex items-center gap-2 border-b border-[#2f332c] pb-2 text-sm font-bold uppercase tracking-wide text-stone-300"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-braces h-4 w-4 text-economy-gold" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"></path><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"></path></svg>JSON import/export</div><div class="grid gap-3"><div class="flex flex-wrap gap-2"><button class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-bold transition border-economy-teal/70 bg-economy-teal text-[#06110f] hover:bg-[#6bcbbb] " type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-download h-4 w-4" aria-hidden="true"><path d="M12 15V3"></path><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m7 10 5 5 5-5"></path></svg>Load export</button><button class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-bold transition border-economy-gold/70 bg-economy-gold/20 text-economy-gold hover:bg-economy-gold/30 " type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-flask-conical h-4 w-4" aria-hidden="true"><path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2"></path><path d="M6.453 15h11.094"></path><path d="M8.5 2h7"></path></svg>Demo</button></div><textarea class="min-h-32 rounded-md border border-[#3b3831] bg-[#0d0f0d] p-2 font-mono text-xs text-stone-200 outline-none focus:border-economy-gold" readOnly="">{
+  &quot;schemaVersion&quot;: 1,
+  &quot;products&quot;: [
+    {
+      &quot;id&quot;: &quot;product-bread&quot;,
+      &quot;name&quot;: &quot;Bread&quot;,
+      &quot;category&quot;: &quot;food&quot;,
+      &quot;weightKg&quot;: 0.5,
+      &quot;volumeM3&quot;: 0.002,
+      &quot;shelfLifeDays&quot;: 3,
+      &quot;baseQuality&quot;: 0.62,
+      &quot;brandManufacturer&quot;: &quot;Harbor Bakery&quot;,
+      &quot;needCategory&quot;: &quot;food&quot;
+    },
+    {
+      &quot;id&quot;: &quot;product-clinic-visit&quot;,
+      &quot;name&quot;: &quot;Clinic Visit&quot;,
+      &quot;category&quot;: &quot;consumer&quot;,
+      &quot;weightKg&quot;: 0,
+      &quot;volumeM3&quot;: 0,
+      &quot;shelfLifeDays&quot;: null,
+      &quot;baseQuality&quot;: 0.66,
+      &quot;brandManufacturer&quot;: &quot;HealthPoint&quot;,
+      &quot;needCategory&quot;: &quot;medicine&quot;
+    },
+    {
+      &quot;id&quot;: &quot;product-bus-ticket&quot;,
+      &quot;name&quot;: &quot;Bus Ticket&quot;,
+      &quot;category&quot;: &quot;consumer&quot;,
+      &quot;weightKg&quot;: 0,
+      &quot;volumeM3&quot;: 0,
+      &quot;shelfLifeDays&quot;: null,
+      &quot;baseQuality&quot;: 0.54,
+      &quot;brandManufacturer&quot;: &quot;City Transit&quot;,
+      &quot;needCategory&quot;: &quot;transport&quot;
+    }
+  ],
+  &quot;resources&quot;: [
+    {
+      &quot;id&quot;: &quot;resource-wheat&quot;,
+      &quot;name&quot;: &quot;Wheat&quot;,
+      &quot;category&quot;: &quot;agricultural&quot;,
+      &quot;unit&quot;: &quot;kg&quot;,
+      &quot;baseCostMinor&quot;: 90,
+      &quot;scarcity&quot;: 0.32,
+      &quot;renewable&quot;: true
+    },
+    {
+      &quot;id&quot;: &quot;resource-electricity&quot;,
+      &quot;name&quot;: &quot;Electricity&quot;,
+      &quot;category&quot;: &quot;energy&quot;,
+      &quot;unit&quot;: &quot;kWh&quot;,
+      &quot;baseCostMinor&quot;: 75,
+      &quot;scarcity&quot;: 0.18,
+      &quot;renewable&quot;: false
+    },
+    {
+      &quot;id&quot;: &quot;resource-medical-supplies&quot;,
+      &quot;name&quot;: &quot;Medical Supplies&quot;,
+      &quot;category&quot;: &quot;industrial&quot;,
+      &quot;unit&quot;: &quot;pack&quot;,
+      &quot;baseCostMinor&quot;: 540,
+      &quot;scarcity&quot;: 0.42,
+      &quot;renewable&quot;: false
+    }
+  ],
+  &quot;productionChains&quot;: [
+    {
+      &quot;id&quot;: &quot;chain-bread&quot;,
+      &quot;name&quot;: &quot;Bakery Line&quot;,
+      &quot;inputs&quot;: [
+        {
+          &quot;kind&quot;: &quot;resource&quot;,
+          &quot;id&quot;: &quot;resource-wheat&quot;,
+          &quot;quantity&quot;: 0.42
+        }
+      ],
+      &quot;outputProductId&quot;: &quot;product-bread&quot;,
+      &quot;outputQuantity&quot;: 1,
+      &quot;targetPriceMinor&quot;: 320,
+      &quot;laborHours&quot;: 0.03,
+      &quot;energyKwh&quot;: 0.07,
+      &quot;durationHours&quot;: 0.04,
+      &quot;equipmentBuildingIds&quot;: [
+        &quot;building-bakery&quot;
+      ],
+      &quot;waste&quot;: [
+        {
+          &quot;resourceId&quot;: &quot;resource-wheat&quot;,
+          &quot;quantity&quot;: 0.01
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;chain-clinic-visit&quot;,
+      &quot;name&quot;: &quot;Primary Clinic Shift&quot;,
+      &quot;inputs&quot;: [
+        {
+          &quot;kind&quot;: &quot;resource&quot;,
+          &quot;id&quot;: &quot;resource-medical-supplies&quot;,
+          &quot;quantity&quot;: 0.2
+        }
+      ],
+      &quot;outputProductId&quot;: &quot;product-clinic-visit&quot;,
+      &quot;outputQuantity&quot;: 1,
+      &quot;targetPriceMinor&quot;: 1900,
+      &quot;laborHours&quot;: 0.35,
+      &quot;energyKwh&quot;: 0.12,
+      &quot;durationHours&quot;: 0.5,
+      &quot;equipmentBuildingIds&quot;: [
+        &quot;building-clinic&quot;
+      ],
+      &quot;waste&quot;: []
+    }
+  ],
+  &quot;buildings&quot;: [
+    {
+      &quot;id&quot;: &quot;building-bakery&quot;,
+      &quot;name&quot;: &quot;Bakery&quot;,
+      &quot;category&quot;: &quot;factory&quot;,
+      &quot;buildCostMinor&quot;: 7500000,
+      &quot;maintenanceMinor&quot;: 38000,
+      &quot;energyKwh&quot;: 80,
+      &quot;capacity&quot;: 12000,
+      &quot;warehouseType&quot;: &quot;general&quot;
+    },
+    {
+      &quot;id&quot;: &quot;building-clinic&quot;,
+      &quot;name&quot;: &quot;Clinic&quot;,
+      &quot;category&quot;: &quot;office&quot;,
+      &quot;buildCostMinor&quot;: 19000000,
+      &quot;maintenanceMinor&quot;: 84000,
+      &quot;energyKwh&quot;: 140,
+      &quot;capacity&quot;: 1200,
+      &quot;warehouseType&quot;: &quot;cold_storage&quot;
+    }
+  ],
+  &quot;companyTypes&quot;: [
+    {
+      &quot;id&quot;: &quot;company-type-retail-producer&quot;,
+      &quot;name&quot;: &quot;Retail Producer&quot;,
+      &quot;licenseCostMinor&quot;: 250000,
+      &quot;allowedBuildingIds&quot;: [
+        &quot;building-bakery&quot;
+      ],
+      &quot;reputationRequirement&quot;: 0.2,
+      &quot;transportType&quot;: &quot;road&quot;
+    },
+    {
+      &quot;id&quot;: &quot;company-type-health-provider&quot;,
+      &quot;name&quot;: &quot;Health Provider&quot;,
+      &quot;licenseCostMinor&quot;: 1200000,
+      &quot;allowedBuildingIds&quot;: [
+        &quot;building-clinic&quot;
+      ],
+      &quot;reputationRequirement&quot;: 0.45,
+      &quot;transportType&quot;: null
+    }
+  ],
+  &quot;laws&quot;: [
+    {
+      &quot;id&quot;: &quot;law-food-safety&quot;,
+      &quot;name&quot;: &quot;Food Safety Standard&quot;,
+      &quot;type&quot;: &quot;industry_license&quot;,
+      &quot;enabled&quot;: true,
+      &quot;parameters&quot;: {
+        &quot;industry&quot;: &quot;food&quot;,
+        &quot;annualFeeMinor&quot;: 250000
+      },
+      &quot;restrictions&quot;: &quot;Only licensed food producers can operate retail food chains.&quot;,
+      &quot;economicImpact&quot;: -0.02,
+      &quot;stabilityImpact&quot;: 0.03,
+      &quot;taxRate&quot;: 0.04,
+      &quot;subsidyMinor&quot;: 0,
+      &quot;targetCategory&quot;: &quot;food&quot;
+    },
+    {
+      &quot;id&quot;: &quot;law-health-subsidy&quot;,
+      &quot;name&quot;: &quot;Basic Health Subsidy&quot;,
+      &quot;type&quot;: &quot;sales_tax&quot;,
+      &quot;enabled&quot;: true,
+      &quot;parameters&quot;: {
+        &quot;rate&quot;: 0.02,
+        &quot;earmark&quot;: &quot;medicine&quot;
+      },
+      &quot;restrictions&quot;: &quot;Applies to consumer services and funds health subsidies.&quot;,
+      &quot;economicImpact&quot;: -0.01,
+      &quot;stabilityImpact&quot;: 0.04,
+      &quot;taxRate&quot;: 0.02,
+      &quot;subsidyMinor&quot;: 350,
+      &quot;targetCategory&quot;: &quot;consumer&quot;
+    }
+  ],
+  &quot;technologies&quot;: [
+    {
+      &quot;id&quot;: &quot;technology-heat-recovery-ovens&quot;,
+      &quot;name&quot;: &quot;Heat Recovery Ovens&quot;,
+      &quot;domain&quot;: &quot;production&quot;,
+      &quot;industry&quot;: &quot;food&quot;,
+      &quot;accessModel&quot;: &quot;patent&quot;,
+      &quot;researchCostMinor&quot;: 50000,
+      &quot;unlocked&quot;: true,
+      &quot;efficiencyBonus&quot;: 0.08,
+      &quot;energyReduction&quot;: 0.12,
+      &quot;inputReduction&quot;: 0.16,
+      &quot;pollutionReduction&quot;: 0.04,
+      &quot;logisticsBonus&quot;: 0,
+      &quot;healthBonus&quot;: 0,
+      &quot;discoveryBonus&quot;: 0,
+      &quot;requiredTechnologyIds&quot;: []
+    },
+    {
+      &quot;id&quot;: &quot;technology-clinic-triage-ai&quot;,
+      &quot;name&quot;: &quot;Clinic Triage AI&quot;,
+      &quot;domain&quot;: &quot;medicine&quot;,
+      &quot;industry&quot;: &quot;medicine&quot;,
+      &quot;accessModel&quot;: &quot;trade_secret&quot;,
+      &quot;researchCostMinor&quot;: 70000,
+      &quot;unlocked&quot;: false,
+      &quot;efficiencyBonus&quot;: 0.14,
+      &quot;energyReduction&quot;: 0.02,
+      &quot;inputReduction&quot;: 0.03,
+      &quot;pollutionReduction&quot;: 0,
+      &quot;logisticsBonus&quot;: 0,
+      &quot;healthBonus&quot;: 0.1,
+      &quot;discoveryBonus&quot;: 0,
+      &quot;requiredTechnologyIds&quot;: []
+    }
+  ],
+  &quot;resourceDepositTemplates&quot;: [
+    {
+      &quot;id&quot;: &quot;deposit-template-wheat-basin&quot;,
+      &quot;name&quot;: &quot;Wheat Basin&quot;,
+      &quot;resourceId&quot;: &quot;resource-wheat&quot;,
+      &quot;productId&quot;: &quot;product-bread&quot;,
+      &quot;category&quot;: &quot;agricultural&quot;,
+      &quot;initialQuantity&quot;: 1000000,
+      &quot;extractionPerTick&quot;: 18000,
+      &quot;discoveryChance&quot;: 0.02,
+      &quot;quality&quot;: 0.62
+    },
+    {
+      &quot;id&quot;: &quot;deposit-template-clean-energy&quot;,
+      &quot;name&quot;: &quot;Geothermal Anomaly&quot;,
+      &quot;resourceId&quot;: &quot;resource-electricity&quot;,
+      &quot;productId&quot;: null,
+      &quot;category&quot;: &quot;energy&quot;,
+      &quot;initialQuantity&quot;: 220000,
+      &quot;extractionPerTick&quot;: 4000,
+      &quot;discoveryChance&quot;: 0.35,
+      &quot;quality&quot;: 0.77
+    }
+  ],
+  &quot;pollutionFactors&quot;: [
+    {
+      &quot;id&quot;: &quot;pollution-food-light-industry&quot;,
+      &quot;sourceCategory&quot;: &quot;food&quot;,
+      &quot;air&quot;: 0.002,
+      &quot;water&quot;: 0.0006,
+      &quot;soil&quot;: 0.0004,
+      &quot;carbon&quot;: 0.001
+    },
+    {
+      &quot;id&quot;: &quot;pollution-energy-carbon&quot;,
+      &quot;sourceCategory&quot;: &quot;energy&quot;,
+      &quot;air&quot;: 0.006,
+      &quot;water&quot;: 0.001,
+      &quot;soil&quot;: 0.0007,
+      &quot;carbon&quot;: 0.012
+    }
+  ],
+  &quot;infrastructureDefaults&quot;: {
+    &quot;roadQuality&quot;: 0.68,
+    &quot;railQuality&quot;: 0.74,
+    &quot;portQuality&quot;: 0.7,
+    &quot;routeCapacityPerTick&quot;: 40000,
+    &quot;borderDelayTicks&quot;: 2,
+    &quot;baseCostMinorPerUnit&quot;: 18
+  }
+}</textarea><form class="grid gap-2"><textarea class="min-h-32 rounded-md border border-[#3b3831] bg-[#0d0f0d] p-2 font-mono text-xs text-stone-200 outline-none focus:border-economy-teal">{
+  &quot;schemaVersion&quot;: 1,
+  &quot;products&quot;: [
+    {
+      &quot;id&quot;: &quot;product-bread&quot;,
+      &quot;name&quot;: &quot;Bread&quot;,
+      &quot;category&quot;: &quot;food&quot;,
+      &quot;weightKg&quot;: 0.5,
+      &quot;volumeM3&quot;: 0.002,
+      &quot;shelfLifeDays&quot;: 3,
+      &quot;baseQuality&quot;: 0.62,
+      &quot;brandManufacturer&quot;: &quot;Harbor Bakery&quot;,
+      &quot;needCategory&quot;: &quot;food&quot;
+    },
+    {
+      &quot;id&quot;: &quot;product-clinic-visit&quot;,
+      &quot;name&quot;: &quot;Clinic Visit&quot;,
+      &quot;category&quot;: &quot;consumer&quot;,
+      &quot;weightKg&quot;: 0,
+      &quot;volumeM3&quot;: 0,
+      &quot;shelfLifeDays&quot;: null,
+      &quot;baseQuality&quot;: 0.66,
+      &quot;brandManufacturer&quot;: &quot;HealthPoint&quot;,
+      &quot;needCategory&quot;: &quot;medicine&quot;
+    },
+    {
+      &quot;id&quot;: &quot;product-bus-ticket&quot;,
+      &quot;name&quot;: &quot;Bus Ticket&quot;,
+      &quot;category&quot;: &quot;consumer&quot;,
+      &quot;weightKg&quot;: 0,
+      &quot;volumeM3&quot;: 0,
+      &quot;shelfLifeDays&quot;: null,
+      &quot;baseQuality&quot;: 0.54,
+      &quot;brandManufacturer&quot;: &quot;City Transit&quot;,
+      &quot;needCategory&quot;: &quot;transport&quot;
+    }
+  ],
+  &quot;resources&quot;: [
+    {
+      &quot;id&quot;: &quot;resource-wheat&quot;,
+      &quot;name&quot;: &quot;Wheat&quot;,
+      &quot;category&quot;: &quot;agricultural&quot;,
+      &quot;unit&quot;: &quot;kg&quot;,
+      &quot;baseCostMinor&quot;: 90,
+      &quot;scarcity&quot;: 0.32,
+      &quot;renewable&quot;: true
+    },
+    {
+      &quot;id&quot;: &quot;resource-electricity&quot;,
+      &quot;name&quot;: &quot;Electricity&quot;,
+      &quot;category&quot;: &quot;energy&quot;,
+      &quot;unit&quot;: &quot;kWh&quot;,
+      &quot;baseCostMinor&quot;: 75,
+      &quot;scarcity&quot;: 0.18,
+      &quot;renewable&quot;: false
+    },
+    {
+      &quot;id&quot;: &quot;resource-medical-supplies&quot;,
+      &quot;name&quot;: &quot;Medical Supplies&quot;,
+      &quot;category&quot;: &quot;industrial&quot;,
+      &quot;unit&quot;: &quot;pack&quot;,
+      &quot;baseCostMinor&quot;: 540,
+      &quot;scarcity&quot;: 0.42,
+      &quot;renewable&quot;: false
+    }
+  ],
+  &quot;productionChains&quot;: [
+    {
+      &quot;id&quot;: &quot;chain-bread&quot;,
+      &quot;name&quot;: &quot;Bakery Line&quot;,
+      &quot;inputs&quot;: [
+        {
+          &quot;kind&quot;: &quot;resource&quot;,
+          &quot;id&quot;: &quot;resource-wheat&quot;,
+          &quot;quantity&quot;: 0.42
+        }
+      ],
+      &quot;outputProductId&quot;: &quot;product-bread&quot;,
+      &quot;outputQuantity&quot;: 1,
+      &quot;targetPriceMinor&quot;: 320,
+      &quot;laborHours&quot;: 0.03,
+      &quot;energyKwh&quot;: 0.07,
+      &quot;durationHours&quot;: 0.04,
+      &quot;equipmentBuildingIds&quot;: [
+        &quot;building-bakery&quot;
+      ],
+      &quot;waste&quot;: [
+        {
+          &quot;resourceId&quot;: &quot;resource-wheat&quot;,
+          &quot;quantity&quot;: 0.01
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;chain-clinic-visit&quot;,
+      &quot;name&quot;: &quot;Primary Clinic Shift&quot;,
+      &quot;inputs&quot;: [
+        {
+          &quot;kind&quot;: &quot;resource&quot;,
+          &quot;id&quot;: &quot;resource-medical-supplies&quot;,
+          &quot;quantity&quot;: 0.2
+        }
+      ],
+      &quot;outputProductId&quot;: &quot;product-clinic-visit&quot;,
+      &quot;outputQuantity&quot;: 1,
+      &quot;targetPriceMinor&quot;: 1900,
+      &quot;laborHours&quot;: 0.35,
+      &quot;energyKwh&quot;: 0.12,
+      &quot;durationHours&quot;: 0.5,
+      &quot;equipmentBuildingIds&quot;: [
+        &quot;building-clinic&quot;
+      ],
+      &quot;waste&quot;: []
+    }
+  ],
+  &quot;buildings&quot;: [
+    {
+      &quot;id&quot;: &quot;building-bakery&quot;,
+      &quot;name&quot;: &quot;Bakery&quot;,
+      &quot;category&quot;: &quot;factory&quot;,
+      &quot;buildCostMinor&quot;: 7500000,
+      &quot;maintenanceMinor&quot;: 38000,
+      &quot;energyKwh&quot;: 80,
+      &quot;capacity&quot;: 12000,
+      &quot;warehouseType&quot;: &quot;general&quot;
+    },
+    {
+      &quot;id&quot;: &quot;building-clinic&quot;,
+      &quot;name&quot;: &quot;Clinic&quot;,
+      &quot;category&quot;: &quot;office&quot;,
+      &quot;buildCostMinor&quot;: 19000000,
+      &quot;maintenanceMinor&quot;: 84000,
+      &quot;energyKwh&quot;: 140,
+      &quot;capacity&quot;: 1200,
+      &quot;warehouseType&quot;: &quot;cold_storage&quot;
+    }
+  ],
+  &quot;companyTypes&quot;: [
+    {
+      &quot;id&quot;: &quot;company-type-retail-producer&quot;,
+      &quot;name&quot;: &quot;Retail Producer&quot;,
+      &quot;licenseCostMinor&quot;: 250000,
+      &quot;allowedBuildingIds&quot;: [
+        &quot;building-bakery&quot;
+      ],
+      &quot;reputationRequirement&quot;: 0.2,
+      &quot;transportType&quot;: &quot;road&quot;
+    },
+    {
+      &quot;id&quot;: &quot;company-type-health-provider&quot;,
+      &quot;name&quot;: &quot;Health Provider&quot;,
+      &quot;licenseCostMinor&quot;: 1200000,
+      &quot;allowedBuildingIds&quot;: [
+        &quot;building-clinic&quot;
+      ],
+      &quot;reputationRequirement&quot;: 0.45,
+      &quot;transportType&quot;: null
+    }
+  ],
+  &quot;laws&quot;: [
+    {
+      &quot;id&quot;: &quot;law-food-safety&quot;,
+      &quot;name&quot;: &quot;Food Safety Standard&quot;,
+      &quot;type&quot;: &quot;industry_license&quot;,
+      &quot;enabled&quot;: true,
+      &quot;parameters&quot;: {
+        &quot;industry&quot;: &quot;food&quot;,
+        &quot;annualFeeMinor&quot;: 250000
+      },
+      &quot;restrictions&quot;: &quot;Only licensed food producers can operate retail food chains.&quot;,
+      &quot;economicImpact&quot;: -0.02,
+      &quot;stabilityImpact&quot;: 0.03,
+      &quot;taxRate&quot;: 0.04,
+      &quot;subsidyMinor&quot;: 0,
+      &quot;targetCategory&quot;: &quot;food&quot;
+    },
+    {
+      &quot;id&quot;: &quot;law-health-subsidy&quot;,
+      &quot;name&quot;: &quot;Basic Health Subsidy&quot;,
+      &quot;type&quot;: &quot;sales_tax&quot;,
+      &quot;enabled&quot;: true,
+      &quot;parameters&quot;: {
+        &quot;rate&quot;: 0.02,
+        &quot;earmark&quot;: &quot;medicine&quot;
+      },
+      &quot;restrictions&quot;: &quot;Applies to consumer services and funds health subsidies.&quot;,
+      &quot;economicImpact&quot;: -0.01,
+      &quot;stabilityImpact&quot;: 0.04,
+      &quot;taxRate&quot;: 0.02,
+      &quot;subsidyMinor&quot;: 350,
+      &quot;targetCategory&quot;: &quot;consumer&quot;
+    }
+  ],
+  &quot;technologies&quot;: [
+    {
+      &quot;id&quot;: &quot;technology-heat-recovery-ovens&quot;,
+      &quot;name&quot;: &quot;Heat Recovery Ovens&quot;,
+      &quot;domain&quot;: &quot;production&quot;,
+      &quot;industry&quot;: &quot;food&quot;,
+      &quot;accessModel&quot;: &quot;patent&quot;,
+      &quot;researchCostMinor&quot;: 50000,
+      &quot;unlocked&quot;: true,
+      &quot;efficiencyBonus&quot;: 0.08,
+      &quot;energyReduction&quot;: 0.12,
+      &quot;inputReduction&quot;: 0.16,
+      &quot;pollutionReduction&quot;: 0.04,
+      &quot;logisticsBonus&quot;: 0,
+      &quot;healthBonus&quot;: 0,
+      &quot;discoveryBonus&quot;: 0,
+      &quot;requiredTechnologyIds&quot;: []
+    },
+    {
+      &quot;id&quot;: &quot;technology-clinic-triage-ai&quot;,
+      &quot;name&quot;: &quot;Clinic Triage AI&quot;,
+      &quot;domain&quot;: &quot;medicine&quot;,
+      &quot;industry&quot;: &quot;medicine&quot;,
+      &quot;accessModel&quot;: &quot;trade_secret&quot;,
+      &quot;researchCostMinor&quot;: 70000,
+      &quot;unlocked&quot;: false,
+      &quot;efficiencyBonus&quot;: 0.14,
+      &quot;energyReduction&quot;: 0.02,
+      &quot;inputReduction&quot;: 0.03,
+      &quot;pollutionReduction&quot;: 0,
+      &quot;logisticsBonus&quot;: 0,
+      &quot;healthBonus&quot;: 0.1,
+      &quot;discoveryBonus&quot;: 0,
+      &quot;requiredTechnologyIds&quot;: []
+    }
+  ],
+  &quot;resourceDepositTemplates&quot;: [
+    {
+      &quot;id&quot;: &quot;deposit-template-wheat-basin&quot;,
+      &quot;name&quot;: &quot;Wheat Basin&quot;,
+      &quot;resourceId&quot;: &quot;resource-wheat&quot;,
+      &quot;productId&quot;: &quot;product-bread&quot;,
+      &quot;category&quot;: &quot;agricultural&quot;,
+      &quot;initialQuantity&quot;: 1000000,
+      &quot;extractionPerTick&quot;: 18000,
+      &quot;discoveryChance&quot;: 0.02,
+      &quot;quality&quot;: 0.62
+    },
+    {
+      &quot;id&quot;: &quot;deposit-template-clean-energy&quot;,
+      &quot;name&quot;: &quot;Geothermal Anomaly&quot;,
+      &quot;resourceId&quot;: &quot;resource-electricity&quot;,
+      &quot;productId&quot;: null,
+      &quot;category&quot;: &quot;energy&quot;,
+      &quot;initialQuantity&quot;: 220000,
+      &quot;extractionPerTick&quot;: 4000,
+      &quot;discoveryChance&quot;: 0.35,
+      &quot;quality&quot;: 0.77
+    }
+  ],
+  &quot;pollutionFactors&quot;: [
+    {
+      &quot;id&quot;: &quot;pollution-food-light-industry&quot;,
+      &quot;sourceCategory&quot;: &quot;food&quot;,
+      &quot;air&quot;: 0.002,
+      &quot;water&quot;: 0.0006,
+      &quot;soil&quot;: 0.0004,
+      &quot;carbon&quot;: 0.001
+    },
+    {
+      &quot;id&quot;: &quot;pollution-energy-carbon&quot;,
+      &quot;sourceCategory&quot;: &quot;energy&quot;,
+      &quot;air&quot;: 0.006,
+      &quot;water&quot;: 0.001,
+      &quot;soil&quot;: 0.0007,
+      &quot;carbon&quot;: 0.012
+    }
+  ],
+  &quot;infrastructureDefaults&quot;: {
+    &quot;roadQuality&quot;: 0.68,
+    &quot;railQuality&quot;: 0.74,
+    &quot;portQuality&quot;: 0.7,
+    &quot;routeCapacityPerTick&quot;: 40000,
+    &quot;borderDelayTicks&quot;: 2,
+    &quot;baseCostMinorPerUnit&quot;: 18
+  }
+}</textarea><button class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-bold transition border-economy-teal/70 bg-economy-teal text-[#06110f] hover:bg-[#6bcbbb] " type="submit"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-upload h-4 w-4" aria-hidden="true"><path d="M12 3v12"></path><path d="m17 8-5-5-5 5"></path><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path></svg>Import JSON</button></form></div></section></aside></div></main><!--$--><!--/$--><script src="/_next/static/chunks/webpack-2571d11f22135ae8.js" id="_R_" async=""></script><script>(self.__next_f=self.__next_f||[]).push([0])</script><script>self.__next_f.push([1,"1:\"$Sreact.fragment\"\n2:I[3670,[],\"\"]\n3:I[1660,[],\"\"]\n4:I[9779,[\"548\",\"static/chunks/548-d04bda09e59c1a60.js\",\"974\",\"static/chunks/app/page-7ed9cc711c39b2fc.js\"],\"ConstructorClient\"]\n5:I[335,[],\"OutletBoundary\"]\n7:I[8558,[],\"AsyncMetadataOutlet\"]\n9:I[335,[],\"ViewportBoundary\"]\nb:I[335,[],\"MetadataBoundary\"]\nc:\"$Sreact.suspense\"\ne:I[7518,[],\"\"]\n:HL[\"/_next/static/css/8c8d5808de69fc82.css\",\"style\"]\n"])</script><script>self.__next_f.push([1,"0:{\"P\":null,\"b\":\"cyog_eDMP-NoWKV6cCeqZ\",\"p\":\"\",\"c\":[\"\",\"\"],\"i\":false,\"f\":[[[\"\",{\"children\":[\"__PAGE__\",{}]},\"$undefined\",\"$undefined\",true],[\"\",[\"$\",\"$1\",\"c\",{\"children\":[[[\"$\",\"link\",\"0\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/css/8c8d5808de69fc82.css\",\"precedence\":\"next\",\"crossOrigin\":\"$undefined\",\"nonce\":\"$undefined\"}]],[\"$\",\"html\",null,{\"lang\":\"ru\",\"children\":[\"$\",\"body\",null,{\"children\":[\"$\",\"$L2\",null,{\"parallelRouterKey\":\"children\",\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$L3\",null,{}],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":[[[\"$\",\"title\",null,{\"children\":\"404: This page could not be found.\"}],[\"$\",\"div\",null,{\"style\":{\"fontFamily\":\"system-ui,\\\"Segoe UI\\\",Roboto,Helvetica,Arial,sans-serif,\\\"Apple Color Emoji\\\",\\\"Segoe UI Emoji\\\"\",\"height\":\"100vh\",\"textAlign\":\"center\",\"display\":\"flex\",\"flexDirection\":\"column\",\"alignItems\":\"center\",\"justifyContent\":\"center\"},\"children\":[\"$\",\"div\",null,{\"children\":[[\"$\",\"style\",null,{\"dangerouslySetInnerHTML\":{\"__html\":\"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}\"}}],[\"$\",\"h1\",null,{\"className\":\"next-error-h1\",\"style\":{\"display\":\"inline-block\",\"margin\":\"0 20px 0 0\",\"padding\":\"0 23px 0 0\",\"fontSize\":24,\"fontWeight\":500,\"verticalAlign\":\"top\",\"lineHeight\":\"49px\"},\"children\":404}],[\"$\",\"div\",null,{\"style\":{\"display\":\"inline-block\"},\"children\":[\"$\",\"h2\",null,{\"style\":{\"fontSize\":14,\"fontWeight\":400,\"lineHeight\":\"49px\",\"margin\":0},\"children\":\"This page could not be found.\"}]}]]}]}]],[]],\"forbidden\":\"$undefined\",\"unauthorized\":\"$undefined\"}]}]}]]}],{\"children\":[\"__PAGE__\",[\"$\",\"$1\",\"c\",{\"children\":[[\"$\",\"$L4\",null,{}],null,[\"$\",\"$L5\",null,{\"children\":[\"$L6\",[\"$\",\"$L7\",null,{\"promise\":\"$@8\"}]]}]]}],{},null,false]},null,false],[\"$\",\"$1\",\"h\",{\"children\":[null,[[\"$\",\"$L9\",null,{\"children\":\"$La\"}],null],[\"$\",\"$Lb\",null,{\"children\":[\"$\",\"div\",null,{\"hidden\":true,\"children\":[\"$\",\"$c\",null,{\"fallback\":null,\"children\":\"$Ld\"}]}]}]]}],false]],\"m\":\"$undefined\",\"G\":[\"$e\",[]],\"s\":false,\"S\":true}\n"])</script><script>self.__next_f.push([1,"a:[[\"$\",\"meta\",\"0\",{\"charSet\":\"utf-8\"}],[\"$\",\"meta\",\"1\",{\"name\":\"viewport\",\"content\":\"width=device-width, initial-scale=1\"}]]\n6:null\n"])</script><script>self.__next_f.push([1,"8:{\"metadata\":[[\"$\",\"title\",\"0\",{\"children\":\"EconomySim Constructor\"}],[\"$\",\"meta\",\"1\",{\"name\":\"description\",\"content\":\"Developer constructor for EconomySim world data.\"}]],\"error\":null,\"digest\":\"$undefined\"}\n"])</script><script>self.__next_f.push([1,"d:\"$8:metadata\"\n"])</script></body></html>

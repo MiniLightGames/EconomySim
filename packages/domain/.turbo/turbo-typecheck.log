@@ -1,0 +1,4 @@
+
+> @economysim/domain@0.1.0 typecheck C:\EconomSim\packages\domain
+> tsc -p tsconfig.json --noEmit
+

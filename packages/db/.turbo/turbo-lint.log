@@ -1,0 +1,4 @@
+
+> @economysim/db@0.1.0 lint C:\EconomSim\packages\db
+> eslint . --max-warnings=0
+

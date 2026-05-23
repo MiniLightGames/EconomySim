@@ -1,0 +1,4 @@
+
+> @economysim/constructor@0.1.0 lint C:\EconomSim\apps\constructor
+> eslint . --max-warnings=0
+

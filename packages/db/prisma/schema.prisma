@@ -1,0 +1,1894 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Country {
+  id              String    @id @default(cuid())
+  name            String
+  currencyCode    String
+  politicalSystem String
+  geometry        Json
+  stability       Float
+  cities          City[]
+  companies       Company[]
+  banks           Bank[]
+  centralBanks    CentralBank[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model City {
+  id                  String               @id @default(cuid())
+  countryId           String
+  name                String
+  location            Json
+  populationTotal     Int
+  infrastructureScore Float
+  country             Country              @relation(fields: [countryId], references: [id])
+  populationCohorts   PopulationCohort[]
+  warehouses          Warehouse[]
+  demandRecords       DemandRecord[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@index([countryId])
+}
+
+model Product {
+  id                String     @id @default(cuid())
+  name              String
+  category          String
+  weightKg          Float
+  volumeM3          Float
+  shelfLifeDays     Int?
+  baseQuality       Float
+  exchangeTradeable Boolean
+  needCategory      String
+  contracts         Contract[]
+  inventoryLots     InventoryLot[]
+  productionPlans   ProductionPlan[]
+  retailOffers      RetailOffer[]
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model Company {
+  id               String     @id @default(cuid())
+  ownerType        String
+  ownerId          String
+  countryId        String
+  name             String
+  legalStatus      String
+  cashBalanceMinor BigInt     @default(0)
+  currencyCode     String     @default("NCR")
+  reputation       Float
+  bankruptcyStatus String
+  country          Country    @relation(fields: [countryId], references: [id])
+  contractsAsBuyer Contract[] @relation("ContractBuyer")
+  contractsAsSeller Contract[] @relation("ContractSeller")
+  warehouses       Warehouse[]
+  productionPlans  ProductionPlan[]
+  retailOffers     RetailOffer[]
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([ownerType, ownerId])
+  @@index([countryId])
+}
+
+model PopulationCohort {
+  id              String   @id @default(cuid())
+  cityId          String
+  size            Int
+  incomeLevel     String
+  ageGroup        String
+  professionGroup String
+  educationLevel  String
+  cashBalanceMinor BigInt   @default(0)
+  satisfaction    Float
+  city            City     @relation(fields: [cityId], references: [id])
+  demandRecords   DemandRecord[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([cityId])
+}
+
+model Bank {
+  id                     String        @id @default(cuid())
+  countryId              String
+  name                   String
+  currencyCode           String        @default("NCR")
+  reserveRatio           Float
+  riskRating             Float
+  capitalMinor           BigInt        @default(0)
+  reservesMinor          BigInt        @default(0)
+  depositsMinor          BigInt        @default(0)
+  loanBookMinor          BigInt        @default(0)
+  nonPerformingLoanMinor BigInt        @default(0)
+  solvent                Boolean       @default(true)
+  country                Country       @relation(fields: [countryId], references: [id])
+  accounts               BankAccount[]
+  loans                  Loan[]
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  @@index([countryId])
+  @@index([solvent])
+}
+
+model CentralBank {
+  id                         String   @id
+  countryId                  String
+  name                       String
+  currencyCode               String
+  policyRate                 Float
+  reserveRequirement         Float
+  baseMoneyMinor             BigInt
+  bondHoldingsMinor          BigInt
+  depositInsuranceEnabled    Boolean  @default(false)
+  depositInsuranceLimitMinor BigInt   @default(0)
+  country                    Country  @relation(fields: [countryId], references: [id])
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([currencyCode])
+}
+
+model BankAccount {
+  id            String   @id
+  bankId        String
+  ownerType     String
+  ownerId       String
+  accountType   String
+  currencyCode  String
+  balanceMinor  BigInt   @default(0)
+  reservedMinor BigInt   @default(0)
+  insured       Boolean  @default(false)
+  status        String
+  bank          Bank     @relation(fields: [bankId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([bankId])
+  @@index([ownerType, ownerId])
+  @@index([status])
+}
+
+model Loan {
+  id                         String   @id
+  borrowerType               String
+  borrowerId                 String
+  lenderBankId               String
+  principalMinor             BigInt
+  outstandingPrincipalMinor  BigInt
+  accruedInterestMinor       BigInt
+  annualInterestRate         Float
+  termTicks                  Int
+  remainingTicks             Int
+  paymentPerTickMinor        BigInt
+  status                     String
+  issuedTick                 Int
+  nextPaymentTick            Int
+  missedPayments             Int      @default(0)
+  collateralCompanyId        String?
+  lenderBank                 Bank     @relation(fields: [lenderBankId], references: [id])
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  @@index([borrowerType, borrowerId])
+  @@index([lenderBankId])
+  @@index([status])
+}
+
+model Payment {
+  id           String   @id
+  loanId       String
+  payerType    String
+  payerId      String
+  amountMinor  BigInt
+  principalMinor BigInt
+  interestMinor  BigInt
+  tick         Int
+  createdAt    DateTime @default(now())
+
+  @@index([loanId])
+  @@index([payerType, payerId])
+  @@index([tick])
+}
+
+model CreditScore {
+  id                   String   @id
+  borrowerType         String
+  borrowerId           String
+  score                Float
+  probabilityOfDefault Float
+  lastUpdatedTick      Int
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([borrowerType, borrowerId])
+}
+
+model InterestRate {
+  id                 String   @id
+  countryId          String
+  centralBankId      String
+  policyRate         Float
+  reserveRequirement Float
+  primeRate          Float
+  updatedTick        Int
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([centralBankId])
+}
+
+model Bond {
+  id                  String   @id
+  issuerType          String
+  issuerId            String
+  name                String
+  currencyCode        String
+  faceValueMinor      BigInt
+  couponRate          Float
+  maturityTick        Int
+  outstandingQuantity Int
+  centralBankEligible Boolean  @default(false)
+  defaulted           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([issuerType, issuerId])
+  @@index([currencyCode])
+  @@index([defaulted])
+}
+
+model Stock {
+  id                String   @id
+  companyId         String
+  ticker            String
+  name              String
+  currencyCode      String
+  sharesOutstanding Int
+  lastPriceMinor    BigInt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([ticker])
+}
+
+model Exchange {
+  id             String   @id
+  countryId      String
+  name           String
+  currencyCode   String
+  listedAssetIds Json
+  open           Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([open])
+}
+
+model OrderBook {
+  id             String   @id
+  exchangeId     String
+  assetType      String
+  assetId        String
+  lastPriceMinor BigInt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([exchangeId])
+  @@index([assetType, assetId])
+}
+
+model ExchangeOrder {
+  id                String   @id
+  exchangeId        String
+  ownerType         String
+  ownerId           String
+  assetType         String
+  assetId           String
+  side              String
+  priceMinor        BigInt
+  quantity          Int
+  remainingQuantity Int
+  status            String
+  createdTick       Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([exchangeId])
+  @@index([ownerType, ownerId])
+  @@index([assetType, assetId])
+  @@index([side, status])
+}
+
+model Trade {
+  id              String   @id
+  exchangeId      String
+  buyOrderId      String
+  sellOrderId     String
+  assetType       String
+  assetId         String
+  priceMinor      BigInt
+  quantity        Int
+  buyerOwnerType  String
+  buyerOwnerId    String
+  sellerOwnerType String
+  sellerOwnerId   String
+  tick            Int
+  createdAt       DateTime @default(now())
+
+  @@index([exchangeId])
+  @@index([assetType, assetId])
+  @@index([tick])
+}
+
+model BankruptcyCase {
+  id                   String   @id
+  debtorType           String
+  debtorId             String
+  status               String
+  openedTick           Int
+  resolvedTick         Int?
+  reason               String
+  estimatedAssetsMinor BigInt
+  claimsMinor          BigInt
+  recoveryRate         Float
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([debtorType, debtorId])
+  @@index([status])
+}
+
+model AssetAuction {
+  id                 String   @id
+  bankruptcyCaseId   String
+  assetType          String
+  assetId            String
+  reservePriceMinor  BigInt
+  highestBidMinor    BigInt
+  highestBidderId    String?
+  status             String
+  createdTick        Int
+  settledTick        Int?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([bankruptcyCaseId])
+  @@index([status])
+}
+
+model Government {
+  id                          String   @id
+  countryId                   String
+  name                        String
+  regime                      String
+  rulingPartyId               String
+  stabilityRating             Float
+  bureaucracyScore            Float
+  legitimacy                  Float
+  corruptionLevel             Float
+  taxEfficiency               Float
+  canNationalize              Boolean  @default(false)
+  canIssueBonds               Boolean  @default(true)
+  importExportControlsActive  Boolean  @default(false)
+  depositInsuranceEnabled     Boolean  @default(false)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([rulingPartyId])
+}
+
+model PoliticalParty {
+  id                  String   @id
+  countryId           String
+  name                String
+  ideology            String
+  popularity          Float
+  fundingMinor        BigInt   @default(0)
+  mediaReach          Float
+  corruptionTolerance Float
+  policyBias          Json
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([countryId])
+}
+
+model Election {
+  id               String   @id
+  countryId        String
+  status           String
+  scheduledTick    Int
+  lastTick         Int
+  winnerPartyId    String?
+  npcVoteWeight    Float
+  playerVoteWeight Float
+  turnout          Float
+  results          Json
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([status])
+}
+
+model Law {
+  id              String   @id
+  countryId       String
+  name            String
+  type            String
+  status          String
+  parameters      Json
+  proposedBy      String
+  support         Float
+  economicImpact  Float
+  stabilityImpact Float
+  enactedTick     Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([type])
+  @@index([status])
+}
+
+model TaxPolicy {
+  id                     String   @id
+  countryId              String
+  profitTaxRate          Float
+  salesTaxRate           Float
+  importTariffRate       Float
+  environmentalFineMinor BigInt
+  updatedTick            Int
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([countryId])
+}
+
+model GovernmentBudget {
+  id                         String   @id
+  countryId                  String
+  tick                       Int
+  revenueMinor               BigInt
+  spendingMinor              BigInt
+  deficitMinor               BigInt
+  treasuryMinor              BigInt
+  welfareSpendingMinor       BigInt
+  infrastructureSpendingMinor BigInt
+  bailoutSpendingMinor       BigInt
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([tick])
+}
+
+model PublicDebt {
+  id                   String   @id
+  countryId            String
+  outstandingDebtMinor BigInt
+  bondIds              Json
+  debtServiceMinor     BigInt
+  creditRating         String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([creditRating])
+}
+
+model Subsidy {
+  id                 String   @id
+  countryId          String
+  targetType         String
+  targetId           String
+  amountMinorPerTick BigInt
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([targetType, targetId])
+  @@index([active])
+}
+
+model License {
+  id          String   @id
+  countryId   String
+  companyId   String
+  industry    String
+  lawId       String
+  status      String
+  issuedTick  Int
+  expiresTick Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([companyId])
+  @@index([industry])
+  @@index([status])
+}
+
+model SanctionPolicy {
+  id              String   @id
+  countryId       String
+  targetCountryId String
+  importBlocked   Boolean  @default(false)
+  exportBlocked   Boolean  @default(false)
+  tariffRate      Float
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([targetCountryId])
+  @@index([active])
+}
+
+model CorruptionIndex {
+  id          String   @id
+  countryId   String
+  value       Float
+  trend       Float
+  updatedTick Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([countryId])
+}
+
+model Protest {
+  id           String   @id
+  countryId    String
+  cityId       String?
+  reason       String
+  intensity    Float
+  status       String
+  startedTick  Int
+  resolvedTick Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([cityId])
+  @@index([status])
+}
+
+model LobbyingAction {
+  id            String   @id
+  playerId      String
+  countryId     String
+  targetPartyId String?
+  lawType       String
+  amountMinor   BigInt
+  influence     Float
+  status        String
+  tick          Int
+  createdAt     DateTime @default(now())
+
+  @@index([playerId])
+  @@index([countryId])
+  @@index([lawType])
+  @@index([tick])
+}
+
+model MediaInfluence {
+  id            String   @id
+  playerId      String
+  countryId     String
+  targetPartyId String?
+  message       String
+  spendMinor    BigInt
+  reach         Float
+  influence     Float
+  tick          Int
+  createdAt     DateTime @default(now())
+
+  @@index([playerId])
+  @@index([countryId])
+  @@index([tick])
+}
+
+model War {
+  id                 String   @id
+  name               String
+  attackerCountryId  String
+  defenderCountryId  String
+  status             String
+  startedTick        Int
+  endedTick          Int?
+  intensity          Float
+  recognitionScore   Float
+  legalStatus        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([attackerCountryId])
+  @@index([defenderCountryId])
+  @@index([status])
+}
+
+model Front {
+  id                  String   @id
+  warId               String
+  name                String
+  attackerArmyId      String
+  defenderArmyId      String
+  cellIds             Json
+  pressure            Float
+  movementDirection   String
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([warId])
+  @@index([active])
+}
+
+model StrategicCell {
+  id                         String   @id
+  countryId                  String
+  name                       String
+  center                     Json
+  sizeKm                     Int
+  terrain                    String
+  legalControllerCountryId   String
+  factualControllerCountryId String
+  contested                  Boolean  @default(false)
+  infrastructureScore        Float
+  population                 Int
+  recognitionStatus          String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([legalControllerCountryId])
+  @@index([factualControllerCountryId])
+  @@index([contested])
+}
+
+model Army {
+  id               String   @id
+  countryId        String
+  warId            String
+  name             String
+  doctrine         String
+  morale           Float
+  readiness        Float
+  manpower         Int
+  fuelStock        Int
+  foodStock        Int
+  ammunitionStock  Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([warId])
+}
+
+model MilitaryUnit {
+  id                String   @id
+  armyId            String
+  cellId            String
+  unitType          String
+  strength          Int
+  mobility          Float
+  supplyNeedPerTick Json
+  combatPower       Float
+  readiness         Float
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([armyId])
+  @@index([cellId])
+  @@index([unitType])
+}
+
+model MilitarySupply {
+  id                String   @id
+  armyId            String
+  productId         String
+  supplyType        String
+  requestedQuantity Int
+  deliveredQuantity Int
+  consumedQuantity  Int
+  shortageQuantity  Int
+  tick              Int
+  createdAt         DateTime @default(now())
+
+  @@index([armyId])
+  @@index([productId])
+  @@index([supplyType])
+  @@index([tick])
+}
+
+model Occupation {
+  id                    String   @id
+  warId                 String
+  cellId                String
+  occupierCountryId     String
+  legalOwnerCountryId   String
+  startedTick           Int
+  recognition           Float
+  taxCaptureRate        Float
+  infrastructureControl Float
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([warId])
+  @@index([cellId])
+  @@index([occupierCountryId])
+}
+
+model Treaty {
+  id          String   @id
+  name        String
+  type        String
+  countryIds  Json
+  status      String
+  signedTick  Int?
+  expiresTick Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@index([status])
+}
+
+model Sanction {
+  id              String   @id
+  sourceCountryId String
+  targetCountryId String
+  warId           String?
+  type            String
+  severity        Float
+  active          Boolean  @default(true)
+  startedTick     Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sourceCountryId])
+  @@index([targetCountryId])
+  @@index([warId])
+  @@index([type])
+  @@index([active])
+}
+
+model Alliance {
+  id         String   @id
+  name       String
+  countryIds Json
+  stance     String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([stance])
+  @@index([active])
+}
+
+model Blockade {
+  id          String   @id
+  warId       String
+  countryId   String
+  routeId     String?
+  portId      String?
+  severity    Float
+  active      Boolean  @default(true)
+  startedTick Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([warId])
+  @@index([countryId])
+  @@index([routeId])
+  @@index([portId])
+  @@index([active])
+}
+
+model RefugeeFlow {
+  id                String   @id
+  warId             String
+  originCityId      String
+  destinationCityId String
+  originCellId      String
+  people            Int
+  tick              Int
+  status            String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([warId])
+  @@index([originCityId])
+  @@index([destinationCityId])
+  @@index([tick])
+}
+
+model WarDamage {
+  id          String   @id
+  warId       String
+  cellId      String
+  targetType  String
+  targetId    String
+  severity    Float
+  damageMinor BigInt
+  tick        Int
+  repaired    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([warId])
+  @@index([cellId])
+  @@index([targetType, targetId])
+  @@index([tick])
+}
+
+model MilitaryOrder {
+  id                String   @id
+  warId             String
+  countryId         String
+  productId         String
+  supplyType        String
+  quantity          Int
+  fulfilledQuantity Int
+  maxPriceMinor     BigInt
+  status            String
+  tick              Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([warId])
+  @@index([countryId])
+  @@index([productId])
+  @@index([status])
+  @@index([tick])
+}
+
+model Technology {
+  id                String   @id
+  name              String
+  domain            String
+  industry          String
+  accessModel       String
+  researchCostMinor BigInt
+  effects           Json
+  prerequisites     Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([domain])
+  @@index([industry])
+  @@index([accessModel])
+}
+
+model TechnologyLevel {
+  id           String   @id
+  technologyId String
+  scopeType    String
+  scopeId      String
+  level        Float
+  unlocked     Boolean  @default(false)
+  progress     Float
+  updatedTick  Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([technologyId])
+  @@index([scopeType, scopeId])
+  @@index([unlocked])
+}
+
+model ResearchProject {
+  id                    String   @id
+  technologyId          String
+  ownerType             String
+  ownerId               String
+  countryId             String
+  companyId             String?
+  name                  String
+  fundingPerTickMinor   BigInt
+  accumulatedResearch   BigInt
+  requiredResearch      BigInt
+  targetScopeType       String
+  targetScopeId         String
+  status                String
+  startedTick           Int
+  completedTick         Int?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([technologyId])
+  @@index([ownerType, ownerId])
+  @@index([countryId])
+  @@index([companyId])
+  @@index([status])
+}
+
+model Patent {
+  id           String   @id
+  technologyId String
+  ownerType    String
+  ownerId      String
+  countryId    String
+  filedTick    Int
+  expiresTick  Int?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([technologyId])
+  @@index([ownerType, ownerId])
+  @@index([countryId])
+  @@index([active])
+}
+
+model LicenseAgreement {
+  id             String   @id
+  technologyId   String
+  licensorType   String
+  licensorId     String
+  licenseeType   String
+  licenseeId     String
+  scopeType      String
+  scopeId        String
+  royaltyRate    Float
+  upfrontFeeMinor BigInt
+  status         String
+  startedTick    Int
+  expiresTick    Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([technologyId])
+  @@index([licensorType, licensorId])
+  @@index([licenseeType, licenseeId])
+  @@index([scopeType, scopeId])
+  @@index([status])
+}
+
+model Pollution {
+  id         String   @id
+  cityId     String
+  countryId  String
+  sourceType String
+  sourceId   String
+  type       String
+  amount     Float
+  tick       Int
+  createdAt  DateTime @default(now())
+
+  @@index([cityId])
+  @@index([countryId])
+  @@index([sourceType, sourceId])
+  @@index([type])
+  @@index([tick])
+}
+
+model EnvironmentalIndex {
+  id                String   @id
+  cityId            String
+  countryId         String
+  airQuality        Float
+  waterQuality      Float
+  soilQuality       Float
+  carbonIntensity   Float
+  biodiversity      Float
+  healthImpact      Float
+  migrationPressure Float
+  updatedTick       Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([cityId])
+  @@index([countryId])
+  @@index([updatedTick])
+}
+
+model ResourceDeposit {
+  id                String   @id
+  resourceId        String
+  productId         String?
+  countryId         String
+  cityId            String?
+  name              String
+  category          String
+  quantity          Int
+  initialQuantity   Int
+  extractionPerTick Int
+  discoveryChance   Float
+  quality           Float
+  status            String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([resourceId])
+  @@index([productId])
+  @@index([countryId])
+  @@index([cityId])
+  @@index([status])
+}
+
+model ResourceDiscovery {
+  id           String   @id
+  depositId    String
+  countryId    String
+  tick         Int
+  discoveredBy String
+  quantity     Int
+  createdAt    DateTime @default(now())
+
+  @@index([depositId])
+  @@index([countryId])
+  @@index([tick])
+}
+
+model CleanEnergyPolicy {
+  id                  String   @id
+  countryId           String
+  name                String
+  status              String
+  subsidyMinorPerTick BigInt
+  pollutionReduction  Float
+  technologyId        String?
+  enactedTick         Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([status])
+  @@index([technologyId])
+}
+
+model BlackMarket {
+  id                  String   @id
+  countryId           String
+  cityId              String
+  productId           String
+  trigger             String
+  demandQuantity      Int
+  supplyQuantity      Int
+  priceMultiplier     Float
+  riskLevel           Float
+  corruptionInfluence Float
+  active              Boolean
+  createdTick         Int
+  lastUpdatedTick     Int
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([cityId])
+  @@index([productId])
+  @@index([active])
+}
+
+model IllegalTrade {
+  id               String   @id
+  blackMarketId    String
+  productId        String
+  sellerCompanyId  String
+  buyerOwnerType   String
+  buyerOwnerId     String
+  quantity         Int
+  priceMinor       BigInt
+  smugglingRouteId String?
+  bribeMinor       BigInt
+  detectionRisk    Float
+  status           String
+  createdTick      Int
+  resolvedTick     Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([blackMarketId])
+  @@index([sellerCompanyId])
+  @@index([buyerOwnerType, buyerOwnerId])
+  @@index([status])
+}
+
+model SmugglingRoute {
+  id                String   @id
+  name              String
+  originCityId      String
+  destinationCityId String
+  productId         String?
+  mode              String
+  capacityPerTick   Int
+  costMinorPerUnit  BigInt
+  baseDetectionRisk Float
+  corruptionShield  Float
+  active            Boolean
+  blocked           Boolean
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([originCityId])
+  @@index([destinationCityId])
+  @@index([productId])
+  @@index([active, blocked])
+}
+
+model CorruptionCase {
+  id             String   @id
+  countryId      String
+  companyId      String?
+  agencyId       String?
+  illegalTradeId String?
+  amountMinor    BigInt
+  severity       Float
+  status         String
+  tick           Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([companyId])
+  @@index([agencyId])
+  @@index([illegalTradeId])
+  @@index([status])
+}
+
+model Investigation {
+  id              String   @id
+  agencyId        String
+  countryId       String
+  targetType      String
+  targetId        String
+  status          String
+  suspicion       Float
+  detectionChance Float
+  openedTick      Int
+  closedTick      Int?
+  outcome         String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([agencyId])
+  @@index([countryId])
+  @@index([targetType, targetId])
+  @@index([status])
+}
+
+model EnforcementAgency {
+  id                   String   @id
+  countryId            String
+  name                 String
+  controlScore         Float
+  capacityPerTick      Int
+  corruptionResistance Float
+  mediaSensitivity     Float
+  budgetMinor          BigInt
+  active               Boolean
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([active])
+}
+
+model Fine {
+  id          String   @id
+  targetType  String
+  targetId    String
+  amountMinor BigInt
+  reason      String
+  status      String
+  tick        Int
+  paidTick    Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([targetType, targetId])
+  @@index([status])
+  @@index([tick])
+}
+
+model Confiscation {
+  id             String   @id
+  illegalTradeId String
+  agencyId       String
+  targetType     String
+  targetId       String
+  productId      String?
+  quantity       Int
+  valueMinor     BigInt
+  tick           Int
+  createdAt      DateTime @default(now())
+
+  @@index([illegalTradeId])
+  @@index([agencyId])
+  @@index([targetType, targetId])
+  @@index([tick])
+}
+
+model ReputationPenalty {
+  id         String   @id
+  targetType String
+  targetId   String
+  amount     Float
+  reason     String
+  tick       Int
+  createdAt  DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([tick])
+}
+
+model IllegalContract {
+  id              String   @id
+  sellerCompanyId String
+  buyerOwnerType  String
+  buyerOwnerId    String
+  productId       String
+  quantity        Int
+  priceMinor      BigInt
+  status          String
+  riskLevel       Float
+  createdTick     Int
+  resolvedTick    Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sellerCompanyId])
+  @@index([buyerOwnerType, buyerOwnerId])
+  @@index([productId])
+  @@index([status])
+}
+
+model Contract {
+  id              String   @id @default(cuid())
+  buyerCompanyId  String
+  sellerCompanyId String
+  productId       String
+  quantity        Int
+  status          String
+  buyerCompany    Company  @relation("ContractBuyer", fields: [buyerCompanyId], references: [id])
+  sellerCompany   Company  @relation("ContractSeller", fields: [sellerCompanyId], references: [id])
+  product         Product  @relation(fields: [productId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([buyerCompanyId])
+  @@index([sellerCompanyId])
+  @@index([productId])
+}
+
+model Warehouse {
+  id            String          @id @default(cuid())
+  companyId     String
+  cityId        String
+  name          String
+  warehouseType String          @default("general")
+  capacity      Int             @default(0)
+  handlingCostMinorPerUnit Int  @default(0)
+  company       Company         @relation(fields: [companyId], references: [id])
+  city          City            @relation(fields: [cityId], references: [id])
+  inventoryLots InventoryLot[]
+  productionPlans ProductionPlan[]
+  retailOffers  RetailOffer[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([companyId])
+  @@index([cityId])
+  @@index([warehouseType])
+}
+
+model InventoryLot {
+  id          String    @id @default(cuid())
+  warehouseId String
+  productId   String
+  quantity    Int
+  quality     Float
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  product     Product   @relation(fields: [productId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([warehouseId])
+  @@index([productId])
+}
+
+model Shipment {
+  id                     String   @id
+  originWarehouseId      String
+  destinationWarehouseId String
+  productId              String
+  quantity               Int
+  routeId                String
+  transportCompanyId     String
+  costMinor              BigInt
+  durationTicks          Int
+  remainingTicks         Int
+  risk                   Float
+  status                 String
+  createdTick            Int
+  departedTick           Int?
+  deliveredTick          Int?
+  blockedReason          String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([originWarehouseId])
+  @@index([destinationWarehouseId])
+  @@index([productId])
+  @@index([routeId])
+  @@index([transportCompanyId])
+  @@index([status])
+}
+
+model LogisticsRoute {
+  id                     String   @id
+  name                   String
+  originWarehouseId      String
+  destinationWarehouseId String
+  nodeIds                Json
+  infrastructureLinkIds  Json
+  transportCompanyId     String
+  mode                   String
+  active                 Boolean  @default(true)
+  blockedReason          String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([originWarehouseId])
+  @@index([destinationWarehouseId])
+  @@index([transportCompanyId])
+  @@index([mode])
+  @@index([active])
+}
+
+model TransportCompany {
+  id                String   @id
+  name              String
+  countryId         String
+  mode              String
+  reliability       Float
+  capacityPerTick   Int
+  costMultiplier    Float
+  cashBalanceMinor  BigInt   @default(0)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([mode])
+  @@index([active])
+}
+
+model RouteNode {
+  id        String   @id
+  type      String
+  name      String
+  cityId    String?
+  location  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([cityId])
+}
+
+model InfrastructureLink {
+  id                       String   @id
+  fromNodeId               String
+  toNodeId                 String
+  mode                     String
+  distanceKm               Float
+  quality                  Float
+  capacityPerTick          Int
+  baseCostMinorPerUnit     Int
+  baseDurationTicks        Int
+  blocked                  Boolean  @default(false)
+  sanctionsBlocked         Boolean  @default(false)
+  warDisruptionRisk        Float    @default(0)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([fromNodeId])
+  @@index([toNodeId])
+  @@index([mode])
+  @@index([blocked])
+}
+
+model BorderCrossing {
+  id            String   @id
+  name          String
+  fromCountryId String
+  toCountryId   String
+  nodeId        String
+  open          Boolean  @default(true)
+  sanctionLevel Float    @default(0)
+  delayTicks    Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([fromCountryId])
+  @@index([toCountryId])
+  @@index([nodeId])
+  @@index([open])
+}
+
+model Port {
+  id              String   @id
+  cityId          String
+  nodeId          String
+  name            String
+  capacityPerTick Int
+  quality         Float
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([cityId])
+  @@index([nodeId])
+}
+
+model Road {
+  id                   String   @id
+  infrastructureLinkId String
+  lanes                Int
+  speedLimitKph        Int
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([infrastructureLinkId])
+}
+
+model RailLine {
+  id                   String   @id
+  infrastructureLinkId String
+  trackCount           Int
+  electrified          Boolean
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([infrastructureLinkId])
+}
+
+model ProductionPlan {
+  id                    String    @id @default(cuid())
+  companyId             String
+  warehouseId           String
+  outputProductId       String
+  outputQuantityPerTick Int
+  inputs                Json
+  active                Boolean   @default(true)
+  company               Company   @relation(fields: [companyId], references: [id])
+  warehouse             Warehouse @relation(fields: [warehouseId], references: [id])
+  outputProduct         Product   @relation(fields: [outputProductId], references: [id])
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([companyId])
+  @@index([warehouseId])
+  @@index([outputProductId])
+}
+
+model RetailOffer {
+  id          String    @id @default(cuid())
+  companyId   String
+  warehouseId String
+  productId   String
+  priceMinor  Int
+  quality     Float
+  active      Boolean   @default(true)
+  company     Company   @relation(fields: [companyId], references: [id])
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  product     Product   @relation(fields: [productId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([companyId])
+  @@index([warehouseId])
+  @@index([productId])
+}
+
+model RetailPriceChange {
+  id            String   @id
+  tick          Int
+  playerId      String
+  companyId     String
+  retailOfferId String
+  productId     String
+  oldPriceMinor BigInt
+  newPriceMinor BigInt
+  currencyCode  String
+  status        String
+  createdAt     DateTime @default(now())
+
+  @@index([tick])
+  @@index([playerId])
+  @@index([companyId])
+  @@index([retailOfferId])
+  @@index([productId])
+  @@index([status])
+}
+
+model ResourceOffer {
+  id                 String   @id
+  companyId          String
+  warehouseId        String
+  productId          String
+  unitPriceMinor     BigInt
+  quality            Float
+  maxQuantityPerTick Int
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([warehouseId])
+  @@index([productId])
+  @@index([active])
+}
+
+model ResourcePurchase {
+  id                String   @id
+  tick              Int
+  playerId          String
+  buyerCompanyId    String
+  sellerCompanyId   String
+  sellerWarehouseId String
+  buyerWarehouseId  String
+  productId         String
+  quantity          Int
+  unitPriceMinor    BigInt
+  totalPriceMinor   BigInt
+  quality           Float
+  status            String
+  createdAt         DateTime @default(now())
+
+  @@index([tick])
+  @@index([playerId])
+  @@index([buyerCompanyId])
+  @@index([sellerCompanyId])
+  @@index([productId])
+  @@index([status])
+}
+
+model ManualProductionRun {
+  id                 String   @id
+  tick               Int
+  playerId           String
+  companyId          String
+  productionPlanId   String
+  warehouseId        String
+  outputProductId    String
+  requestedQuantity  Int
+  producedQuantity   Int
+  inputConsumptions  Json
+  status             String
+  createdAt          DateTime @default(now())
+
+  @@index([tick])
+  @@index([playerId])
+  @@index([companyId])
+  @@index([productionPlanId])
+  @@index([outputProductId])
+  @@index([status])
+}
+
+model DemandRecord {
+  id                String           @id
+  tick              Int
+  cohortId          String
+  cityId            String
+  needCategory      String
+  desiredQuantity   Int
+  purchasedQuantity Int
+  unmetQuantity     Int
+  spendingMinor     BigInt
+  averagePriceMinor Int
+  cohort            PopulationCohort @relation(fields: [cohortId], references: [id])
+  city              City             @relation(fields: [cityId], references: [id])
+  createdAt         DateTime         @default(now())
+
+  @@index([tick])
+  @@index([cohortId])
+  @@index([cityId])
+  @@index([needCategory])
+}
+
+model FinancialTransaction {
+  id        String           @id
+  tick      Int
+  type      String
+  entries   FinancialEntry[]
+  createdAt DateTime         @default(now())
+
+  @@index([tick])
+  @@index([type])
+}
+
+model FinancialEntry {
+  id            String               @id @default(cuid())
+  transactionId String
+  ownerType     String
+  ownerId       String
+  amountMinor   BigInt
+  currencyCode  String
+  transaction   FinancialTransaction @relation(fields: [transactionId], references: [id])
+
+  @@index([transactionId])
+  @@index([ownerType, ownerId])
+}
+
+model NewsItem {
+  id               String   @id
+  tick             Int
+  category         String?
+  templateId       String?
+  headline         String
+  body             String
+  severity         String
+  relatedEntityIds Json
+  reliabilityId    String?
+  createdAt        DateTime @default(now())
+
+  @@index([tick])
+  @@index([severity])
+  @@index([category])
+}
+
+model EventCause {
+  id          String   @id
+  eventId     String
+  tick        Int
+  causeType   String
+  sourceType  String
+  sourceId    String?
+  description String
+  weight      Float
+  createdAt   DateTime @default(now())
+
+  @@index([eventId])
+  @@index([tick])
+  @@index([causeType])
+}
+
+model EventImpact {
+  id          String   @id
+  eventId     String
+  tick        Int
+  targetType  String
+  targetId    String?
+  metricName  String
+  beforeValue Float?
+  afterValue  Float?
+  delta       Float
+  severity    Float
+  createdAt   DateTime @default(now())
+
+  @@index([eventId])
+  @@index([tick])
+  @@index([targetType, targetId])
+}
+
+model MetricChange {
+  id            String   @id
+  tick          Int
+  metricName    String
+  entityType    String
+  entityId      String?
+  previousValue Float
+  currentValue  Float
+  delta         Float
+  percentChange Float
+  createdAt     DateTime @default(now())
+
+  @@index([tick])
+  @@index([metricName])
+  @@index([entityType, entityId])
+}
+
+model Explanation {
+  id               String   @id
+  tick             Int
+  targetType       String
+  targetId         String
+  eventId          String?
+  title            String
+  summary          String
+  confidence       Float
+  reliabilityId    String?
+  causes           Json
+  impactIds        Json
+  relatedMetricIds Json
+  relatedEntityIds Json
+  createdAt        DateTime @default(now())
+
+  @@index([tick])
+  @@index([targetType, targetId])
+  @@index([eventId])
+}
+
+model NewsTemplate {
+  id               String   @id
+  category         String
+  eventType        String
+  headlineTemplate String
+  bodyTemplate     String
+  severity         String
+  active           Boolean
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([category])
+  @@index([eventType])
+  @@index([active])
+}
+
+model Forecast {
+  id                   String   @id
+  tick                 Int
+  targetType           String
+  targetId             String
+  metricName           String
+  currentValue         Float
+  predictedValue       Float
+  horizonTicks         Int
+  confidence           Float
+  scenario             String
+  driverExplanationIds Json
+  createdAt            DateTime @default(now())
+
+  @@index([tick])
+  @@index([targetType, targetId])
+  @@index([metricName])
+}
+
+model DataReliability {
+  id               String   @id
+  countryId        String?
+  source           String
+  grade            String
+  score            Float
+  manipulationRisk Float
+  method           String
+  updatedTick      Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([source])
+  @@index([grade])
+}
+
+model PublicStatistic {
+  id            String   @id
+  tick          Int
+  countryId     String
+  metricName    String
+  value         Float
+  unit          String
+  reliabilityId String
+  source        String
+  distorted     Boolean
+  createdAt     DateTime @default(now())
+
+  @@index([tick])
+  @@index([countryId])
+  @@index([metricName])
+}
+
+model HiddenStatistic {
+  id               String   @id
+  tick             Int
+  ownerType        String
+  ownerId          String
+  metricName       String
+  value            Float
+  unit             String
+  visibilityReason String
+  createdAt        DateTime @default(now())
+
+  @@index([tick])
+  @@index([ownerType, ownerId])
+  @@index([metricName])
+}
+
+model LedgerAccount {
+  id           String        @id @default(cuid())
+  ownerType    String
+  ownerId      String
+  currencyCode String
+  createdAt    DateTime      @default(now())
+  entries      LedgerEntry[]
+
+  @@index([ownerType, ownerId])
+}
+
+model LedgerTransaction {
+  id             String        @id @default(cuid())
+  transactionType String
+  idempotencyKey String        @unique
+  tick           Int
+  createdAt      DateTime      @default(now())
+  entries        LedgerEntry[]
+  auditLogs      AuditLog[]
+}
+
+model LedgerEntry {
+  id              String            @id @default(cuid())
+  transactionId   String
+  accountId       String
+  amountMinor     BigInt
+  currencyCode    String
+  transaction     LedgerTransaction @relation(fields: [transactionId], references: [id])
+  account         LedgerAccount     @relation(fields: [accountId], references: [id])
+
+  @@index([transactionId])
+  @@index([accountId])
+}
+
+model AuditLog {
+  id                    String             @id @default(cuid())
+  userId                String?
+  playerId              String?
+  actionType            String
+  payloadHash           String
+  ipDevice              String?
+  tick                  Int
+  result                String
+  affectedEntities      Json
+  ledgerTransactionId   String?
+  ledgerTransaction     LedgerTransaction? @relation(fields: [ledgerTransactionId], references: [id])
+  createdAt             DateTime           @default(now())
+
+  @@index([playerId])
+  @@index([actionType])
+  @@index([tick])
+}
+
+model Event {
+  id          String   @id
+  tick        Int
+  type        String
+  message     String
+  entityIds   Json
+  metadata    Json
+  createdAt   DateTime @default(now())
+
+  @@index([tick])
+  @@index([type])
+}
+
+model Metric {
+  id        String   @id
+  tick      Int
+  name      String
+  value     Float
+  tags      Json
+  createdAt DateTime @default(now())
+
+  @@index([tick])
+  @@index([name])
+}
+
+model Snapshot {
+  id        String   @id
+  tick      Int
+  stateHash String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@index([tick])
+}

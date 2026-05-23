@@ -66,4 +66,21 @@ Resource -> Facility -> IntermediateProduct -> Facility -> Product
 
 ## Publication workflow
 
-Draft → Validation → Mini Simulation → Review → Publish → Monitor → Disable if broken.
+Draft -> Validation -> Mini Simulation -> Review -> Publish -> Monitor -> Disable if broken.
+
+## Phase 6 Implementation
+
+`apps/constructor` is implemented as a separate Next.js web app for editing constructor data.
+
+- Sections: Products, Resources, Production Chains, Buildings, Company Types, Laws, Technologies.
+- Product editor supports name, category, weight, volume, shelf life, quality, and brand/manufacturer.
+- Production chain editor supports inputs, output, labor, energy, time, equipment, waste, and target price.
+- JSON import/export is available in the UI.
+- Validation checks missing references, duplicate ids, numeric ranges, product cycles, and potential infinite profit.
+- Test mini-simulation calculates cost, revenue, profit, break-even price, margin, demand risk, and warnings.
+
+Known follow-up:
+
+- Persist constructor projects through the backend.
+- Add a visual production-chain graph.
+- Add publish/review workflow with RBAC.

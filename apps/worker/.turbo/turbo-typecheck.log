@@ -1,0 +1,4 @@
+
+> @economysim/worker@0.1.0 typecheck C:\EconomSim\apps\worker
+> tsc -p tsconfig.json --noEmit
+

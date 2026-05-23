@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  background: #0d120f;
+  color: #f4efe4;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    linear-gradient(180deg, rgba(9, 18, 14, 0.96), rgba(13, 15, 13, 0.99)),
+    repeating-linear-gradient(90deg, rgba(79, 183, 165, 0.08) 0 1px, transparent 1px 104px),
+    repeating-linear-gradient(0deg, rgba(215, 168, 79, 0.05) 0 1px, transparent 1px 104px);
+  font-feature-settings:
+    "tnum" 1,
+    "cv02" 1;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+a,
+input,
+select {
+  outline-offset: 3px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #d7a84f;
+}
+
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  transform: translateY(-140%);
+  border: 1px solid rgba(215, 168, 79, 0.8);
+  border-radius: 0.375rem;
+  background: #151914;
+  color: #f4efe4;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition: transform 140ms ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.map-grid {
+  background:
+    linear-gradient(rgba(79, 183, 165, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79, 183, 165, 0.12) 1px, transparent 1px),
+    radial-gradient(circle at center, rgba(215, 168, 79, 0.08), transparent 62%);
+  background-size:
+    28px 28px,
+    28px 28px,
+    100% 100%;
+}
+
+@media (max-width: 640px) {
+  .map-grid {
+    background-size:
+      22px 22px,
+      22px 22px,
+      100% 100%;
+  }
+}

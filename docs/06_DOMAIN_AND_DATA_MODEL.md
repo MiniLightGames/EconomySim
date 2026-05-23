@@ -32,6 +32,16 @@
 - WarCell
 - Technology
 - PollutionZone
+- BlackMarket
+- IllegalTrade
+- SmugglingRoute
+- CorruptionCase
+- Investigation
+- EnforcementAgency
+- Fine
+- Confiscation
+- ReputationPenalty
+- IllegalContract
 - Event
 - Metric
 - Snapshot

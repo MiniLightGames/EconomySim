@@ -1,0 +1,4 @@
+
+> @economysim/api@0.1.0 typecheck C:\EconomSim\apps\api
+> tsc -p tsconfig.json --noEmit
+

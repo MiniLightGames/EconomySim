@@ -1,0 +1,4 @@
+
+> @economysim/ui@0.1.0 typecheck C:\EconomSim\packages\ui
+> tsc -p tsconfig.json --noEmit
+

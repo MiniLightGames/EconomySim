@@ -4,61 +4,75 @@
 
 Игрок не меняет состояние напрямую. Он отправляет намерение/command. Backend проверяет права, деньги, рейтинг, законы, лимиты и передаёт команду ядру.
 
-## Базовые endpoints
+## Реализованный Fastify API
+
+Текущий `apps/api` использует Fastify. По умолчанию local dev работает с in-memory bootstrap store, а Prisma-режим включается через `API_STORE=prisma` после `pnpm db:generate`.
+
+### Health
+
+```http
+GET /health
+```
 
 ### World
 
 ```http
-GET /api/world/status
-GET /api/world/map
-GET /api/world/ticks/current
+GET /world
+GET /world/summary
 ```
 
 ### Countries and cities
 
 ```http
-GET /api/countries
-GET /api/countries/:id
-GET /api/countries/:id/stats
-GET /api/cities/:id
-GET /api/cities/:id/economy
+GET /countries
+GET /countries/:id
+GET /cities/:id
 ```
 
 ### Companies
 
 ```http
-POST /api/commands/create-company
-POST /api/commands/buy-land
-POST /api/commands/build-facility
-POST /api/commands/hire-manager
-GET /api/player/companies
-GET /api/player/companies/:id
+GET /companies
+GET /companies/:id
+POST /companies
 ```
+
+`POST /companies` принимает намерение игрока, валидирует страну, имя и дубликаты, затем создаёт компанию через backend service. Игрок не может передать готовый объект мира.
 
 ### Markets
 
 ```http
-GET /api/markets/retail
-GET /api/markets/exchange/:id/orderbook
-POST /api/commands/set-retail-price
-POST /api/commands/place-exchange-order
+GET /markets
+GET /markets/:id
 ```
 
-### Contracts
+Обычные рынки не используют стакан: API отдаёт retail offers, доступность и среднюю цену.
+
+### Simulation
 
 ```http
-POST /api/commands/create-contract
-POST /api/commands/accept-contract
-GET /api/player/contracts
+POST /simulation/tick
 ```
 
-### Banking
+`POST /simulation/tick` валидирует команды до вызова `simulation-core`. Если команда ссылается на неизвестную страну/город/компанию/товар, тик не сохраняется.
+
+### News and metrics
 
 ```http
-GET /api/banks
-POST /api/commands/open-bank-account
-POST /api/commands/apply-loan
-POST /api/commands/repay-loan
+GET /news
+GET /metrics
+```
+
+## Запланированные endpoints
+
+```http
+POST /commands/create-contract
+POST /commands/accept-contract
+GET /player/contracts
+GET /banks
+POST /commands/open-bank-account
+POST /commands/apply-loan
+POST /commands/repay-loan
 ```
 
 ## Ошибки

@@ -1,0 +1,4 @@
+
+> @economysim/api@0.1.0 build C:\EconomSim\apps\api
+> tsc -p tsconfig.build.json
+

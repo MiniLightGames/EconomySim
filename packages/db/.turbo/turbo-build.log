@@ -1,0 +1,4 @@
+
+> @economysim/db@0.1.0 build C:\EconomSim\packages\db
+> tsc -p tsconfig.build.json
+

@@ -1,0 +1,30 @@
+
+> @economysim/web@0.1.0 build C:\EconomSim\apps\web
+> next build
+
+   ▲ Next.js 15.5.18
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 7.2s
+   Skipping linting
+   Checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/4) ...
+   Generating static pages (1/4) 
+   Generating static pages (2/4) 
+   Generating static pages (3/4) 
+ ✓ Generating static pages (4/4)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                      29 kB         131 kB
+└ ○ /_not-found                            993 B         103 kB
++ First Load JS shared by all             102 kB
+  ├ chunks/1403cfaa-6db8521358bcd91a.js  54.2 kB
+  ├ chunks/159-2398f495578bc26c.js       45.7 kB
+  └ other shared chunks (total)          1.96 kB
+
+
+○  (Static)  prerendered as static content
+
