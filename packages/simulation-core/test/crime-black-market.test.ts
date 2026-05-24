@@ -23,7 +23,8 @@ describe("crime, corruption, and black market simulation", () => {
         }
       ]
     };
-    const result = runTick({ state, commands: [], seed: "crime-ban" });
+    const stabilised = runTick({ state, commands: [], seed: "crime-ban" }).state;
+    const result = runTick({ state: stabilised, commands: [], seed: "crime-ban" });
     const market = result.state.blackMarkets.find(
       (candidate) => candidate.productId === "crime-ban-product-bread" && candidate.cityId === "crime-ban-city-harborview"
     );

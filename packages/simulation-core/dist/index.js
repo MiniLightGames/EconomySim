@@ -78,6 +78,10 @@ function runTick(input) {
     const companies = loadedState.companies.map((company) => ({ ...company }));
     const populationCohorts = loadedState.populationCohorts.map((cohort) => ({ ...cohort }));
     const warehouses = loadedState.warehouses.map((warehouse) => ({ ...warehouse }));
+    const productionPlans = loadedState.productionPlans.map((plan) => ({
+        ...plan,
+        inputs: plan.inputs.map((productionInput) => ({ ...productionInput }))
+    }));
     const inventoryLots = loadedState.inventoryLots.map((lot) => ({ ...lot }));
     const retailOffers = loadedState.retailOffers.map((offer) => ({ ...offer }));
     const retailPriceChanges = [...loadedState.retailPriceChanges];
@@ -186,30 +190,45 @@ function runTick(input) {
     const commandNews = [];
     const demandRecords = [];
     const financialTransactions = [];
+    const resourcePurchases = [...loadedState.resourcePurchases];
+    const manualProductionRuns = [...loadedState.manualProductionRuns];
     const commandAdjustedState = {
         ...loadedState,
+        companies,
+        bankAccounts,
+        creditScores,
+        warehouses,
+        productionPlans,
+        inventoryLots,
         retailOffers,
-        retailPriceChanges
+        retailPriceChanges,
+        resourcePurchases,
+        manualProductionRuns,
+        financialTransactions: loadedState.financialTransactions,
+        licenses
     };
     for (const command of input.commands) {
-        if (command.type !== "SetRetailPriceCommand" || rejectedCommands.some((rejection) => rejection.commandId === command.commandId)) {
+        if (rejectedCommands.some((rejection) => rejection.commandId === command.commandId)) {
             continue;
         }
-        applyRetailPriceUpdate({
+        applyAcceptedPlayerCommand({
             state: commandAdjustedState,
+            command,
+            companies,
+            bankAccounts,
+            creditScores,
+            warehouses,
+            productionPlans,
+            inventoryLots,
             retailOffers,
             retailPriceChanges,
+            licenses,
+            resourcePurchases,
+            manualProductionRuns,
+            financialTransactions,
             events: economyEvents,
             metrics: economyMetrics,
             news: commandNews,
-            input: {
-                playerId: command.playerId,
-                companyId: command.companyId,
-                productId: command.productId,
-                priceMinor: command.priceMinor,
-                currencyCode: command.currencyCode,
-                commandId: command.commandId
-            },
             tick: nextTick,
             seed: input.seed
         });
@@ -541,6 +560,9 @@ function runTick(input) {
         transportCompanies,
         retailOffers,
         retailPriceChanges,
+        productionPlans,
+        resourcePurchases,
+        manualProductionRuns,
         centralBanks,
         banks,
         bankAccounts,
@@ -2222,6 +2244,512 @@ function transferPosition(input) {
         averageCostMinor: input.priceMinor
     });
 }
+function applyAcceptedPlayerCommand(input) {
+    const { command } = input;
+    if (command.type === "CreateCompanyCommand") {
+        applyCreateCompanyCommand(input, command);
+        return;
+    }
+    if (command.type === "BuyLandCommand") {
+        applyBuyLandCommand(input, command);
+        return;
+    }
+    if (command.type === "BuyResourceCommand") {
+        const result = applyBuyResourceCommand(input, command);
+        input.resourcePurchases.push(result.purchase);
+        return;
+    }
+    if (command.type === "RunManualProductionCommand") {
+        const result = applyRunManualProductionCommand(input, command);
+        input.manualProductionRuns.push(result.productionRun);
+        return;
+    }
+    if (command.type === "SetRetailPriceCommand") {
+        applyRetailPriceUpdate({
+            state: input.state,
+            retailOffers: input.retailOffers,
+            retailPriceChanges: input.retailPriceChanges,
+            events: input.events,
+            metrics: input.metrics,
+            news: input.news,
+            input: {
+                playerId: command.playerId,
+                companyId: command.companyId,
+                productId: command.productId,
+                priceMinor: command.priceMinor,
+                currencyCode: command.currencyCode,
+                commandId: command.commandId
+            },
+            tick: input.tick,
+            seed: input.seed
+        });
+    }
+}
+function applyCreateCompanyCommand(input, command) {
+    const country = input.state.countries.find((candidate) => candidate.id === command.countryId);
+    if (!country) {
+        throw new Error("UNKNOWN_COUNTRY");
+    }
+    const normalizedName = command.name.trim();
+    const nameExists = input.companies.some((company) => company.countryId === command.countryId && company.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase());
+    if (nameExists) {
+        throw new Error("COMPANY_NAME_TAKEN");
+    }
+    const company = {
+        id: `${input.seed}-company-${input.tick}-${slugify(normalizedName)}`,
+        ownerType: "player",
+        ownerId: command.playerId,
+        countryId: command.countryId,
+        name: normalizedName,
+        legalStatus: "registered",
+        cashBalanceMinor: 0,
+        currencyCode: country.currencyCode,
+        reputation: 0.5,
+        bankruptcyStatus: "none"
+    };
+    const bank = input.state.banks.find((candidate) => candidate.countryId === command.countryId && candidate.solvent) ?? input.state.banks[0] ?? null;
+    input.companies.push(company);
+    if (bank) {
+        input.bankAccounts.push({
+            id: `${input.seed}-account-${input.tick}-${company.id}`,
+            bankId: bank.id,
+            ownerType: "company",
+            ownerId: company.id,
+            accountType: "checking",
+            currencyCode: country.currencyCode,
+            balanceMinor: 0,
+            reservedMinor: 0,
+            insured: false,
+            status: "active"
+        });
+    }
+    input.creditScores.push({
+        id: `${input.seed}-credit-company-${company.id}`,
+        borrowerType: "company",
+        borrowerId: company.id,
+        score: 0.52,
+        probabilityOfDefault: 0.18,
+        lastUpdatedTick: input.tick
+    });
+    input.events.push({
+        id: `${input.seed}-event-${input.tick}-${command.commandId}-company-registered`,
+        tick: input.tick,
+        type: "CompanyRegisteredEvent",
+        message: `${company.name} registered in ${country.name}.`,
+        entityIds: [company.id, country.id, command.playerId],
+        metadata: {
+            commandId: command.commandId,
+            companyId: company.id,
+            countryId: country.id,
+            playerId: command.playerId
+        }
+    });
+    input.metrics.push({
+        id: `${input.seed}-metric-${input.tick}-${command.commandId}-company-created`,
+        tick: input.tick,
+        name: "company.player.created",
+        value: 1,
+        tags: {
+            companyId: company.id,
+            countryId: country.id,
+            playerId: command.playerId
+        }
+    });
+    input.news.push({
+        id: `${input.seed}-news-${input.tick}-${command.commandId}-company-registered`,
+        tick: input.tick,
+        category: "corporate",
+        templateId: null,
+        headline: `${company.name} registered`,
+        body: `The company is registered through the player command journal. It still needs a land or premise command before operations can start.`,
+        severity: "info",
+        relatedEntityIds: [company.id, country.id],
+        reliabilityId: null
+    });
+}
+function applyBuyLandCommand(input, command) {
+    const company = input.companies.find((candidate) => candidate.id === command.companyId);
+    const city = input.state.cities.find((candidate) => candidate.id === command.cityId);
+    if (!company || company.ownerType !== "player" || company.ownerId !== command.playerId || company.legalStatus !== "registered") {
+        throw new Error("PLAYER_COMPANY_REQUIRED");
+    }
+    if (!city || city.countryId !== company.countryId) {
+        throw new Error("CITY_COMPANY_COUNTRY_MISMATCH");
+    }
+    if (input.warehouses.some((warehouse) => warehouse.companyId === company.id && warehouse.cityId === city.id)) {
+        throw new Error("COMPANY_PREMISE_ALREADY_EXISTS");
+    }
+    const landCostMinor = command.mode === "lease" ? 150_000 : 750_000;
+    const playerAccount = getSettlementAccount(input.bankAccounts, "player", command.playerId, company.currencyCode);
+    if (!playerAccount) {
+        throw new Error("PLAYER_ACCOUNT_NOT_FOUND");
+    }
+    if (getAvailableCashMinor(playerAccount) < landCostMinor) {
+        throw new Error("INSUFFICIENT_PLAYER_BALANCE");
+    }
+    playerAccount.balanceMinor = sanitizeMoney(playerAccount.balanceMinor - landCostMinor);
+    const starterWarehouse = {
+        id: `${input.seed}-warehouse-${input.tick}-${company.id}-starter`,
+        companyId: company.id,
+        cityId: city.id,
+        name: `${company.name} ${command.mode === "lease" ? "Leased" : "Starter"} Premise`,
+        warehouseType: "general",
+        capacity: 50_000,
+        handlingCostMinorPerUnit: 6
+    };
+    const wheatProduct = input.state.products.find((product) => product.name.toLocaleLowerCase() === "wheat") ?? null;
+    const breadProduct = input.state.products.find((product) => product.name.toLocaleLowerCase() === "bread") ?? null;
+    const starterProductionPlan = wheatProduct && breadProduct
+        ? {
+            id: `${input.seed}-production-${input.tick}-${company.id}-bread`,
+            companyId: company.id,
+            warehouseId: starterWarehouse.id,
+            outputProductId: breadProduct.id,
+            outputQuantityPerTick: 2_000,
+            inputs: [{ productId: wheatProduct.id, quantityPerOutput: 0.4 }],
+            active: false
+        }
+        : null;
+    const starterRetailOffer = breadProduct && starterProductionPlan
+        ? {
+            id: `${input.seed}-offer-${input.tick}-${company.id}-bread`,
+            companyId: company.id,
+            warehouseId: starterWarehouse.id,
+            productId: breadProduct.id,
+            priceMinor: 340,
+            quality: breadProduct.baseQuality,
+            active: true
+        }
+        : null;
+    const foodLicenseLaw = input.state.laws.find((law) => law.countryId === company.countryId && law.type === "industry_license" && law.status === "active" && law.parameters.industry === "food");
+    input.warehouses.push(starterWarehouse);
+    if (starterProductionPlan) {
+        input.productionPlans.push(starterProductionPlan);
+    }
+    if (starterRetailOffer) {
+        input.retailOffers.push(starterRetailOffer);
+    }
+    if (foodLicenseLaw && starterProductionPlan) {
+        input.licenses.push({
+            id: `${input.seed}-license-${input.tick}-${company.id}-food`,
+            countryId: company.countryId,
+            companyId: company.id,
+            industry: "food",
+            lawId: foodLicenseLaw.id,
+            status: "active",
+            issuedTick: input.tick,
+            expiresTick: null
+        });
+    }
+    input.financialTransactions.push({
+        id: `${input.seed}-tx-${input.tick}-${command.commandId}-land-premise`,
+        tick: input.tick,
+        type: "LandPremiseTransaction",
+        entries: [
+            {
+                ownerType: "bank_account",
+                ownerId: playerAccount.id,
+                amountMinor: -landCostMinor,
+                currencyCode: company.currencyCode
+            },
+            {
+                ownerType: "state",
+                ownerId: company.countryId,
+                amountMinor: landCostMinor,
+                currencyCode: company.currencyCode
+            }
+        ]
+    });
+    input.events.push({
+        id: `${input.seed}-event-${input.tick}-${command.commandId}-premise-acquired`,
+        tick: input.tick,
+        type: "LandPremiseAcquiredEvent",
+        message: `${company.name} ${command.mode === "lease" ? "leased" : "bought"} a starter premise in ${city.name}.`,
+        entityIds: [company.id, city.id, starterWarehouse.id],
+        metadata: {
+            commandId: command.commandId,
+            companyId: company.id,
+            cityId: city.id,
+            warehouseId: starterWarehouse.id,
+            productionPlanId: starterProductionPlan?.id ?? "",
+            retailOfferId: starterRetailOffer?.id ?? "",
+            costMinor: landCostMinor
+        }
+    });
+    input.metrics.push({
+        id: `${input.seed}-metric-${input.tick}-${command.commandId}-premise-cost`,
+        tick: input.tick,
+        name: "land.premise.cost_minor",
+        value: landCostMinor,
+        tags: {
+            companyId: company.id,
+            cityId: city.id,
+            mode: command.mode ?? "purchase"
+        }
+    });
+    input.news.push({
+        id: `${input.seed}-news-${input.tick}-${command.commandId}-premise-acquired`,
+        tick: input.tick,
+        category: "corporate",
+        templateId: null,
+        headline: `${company.name} opens a starter premise`,
+        body: `A validated ${command.mode ?? "purchase"} command created the first warehouse, bread production plan, retail offer, and required starter license where applicable.`,
+        severity: "info",
+        relatedEntityIds: [company.id, city.id, starterWarehouse.id],
+        reliabilityId: null
+    });
+}
+function applyBuyResourceCommand(input, command) {
+    const quantity = sanitizeQuantity(command.quantity);
+    const maxUnitPriceMinor = sanitizeMoney(command.maxUnitPriceMinor);
+    const offer = input.state.resourceOffers.find((candidate) => candidate.id === command.resourceOfferId);
+    if (!offer || !offer.active) {
+        throw new Error("UNKNOWN_OR_INACTIVE_RESOURCE_OFFER");
+    }
+    if (quantity <= 0 || maxUnitPriceMinor <= 0) {
+        throw new Error("INVALID_RESOURCE_PURCHASE");
+    }
+    if (offer.unitPriceMinor > maxUnitPriceMinor) {
+        throw new Error("RESOURCE_PRICE_EXCEEDS_LIMIT");
+    }
+    if (quantity > offer.maxQuantityPerTick) {
+        throw new Error("RESOURCE_QUANTITY_EXCEEDS_OFFER_LIMIT");
+    }
+    const product = input.state.products.find((candidate) => candidate.id === offer.productId);
+    const sellerWarehouse = input.warehouses.find((warehouse) => warehouse.id === offer.warehouseId);
+    const sellerCompany = input.companies.find((company) => company.id === offer.companyId);
+    const buyerCompany = input.companies.find((company) => company.id === command.buyerCompanyId);
+    const buyerWarehouse = (command.buyerWarehouseId
+        ? input.warehouses.find((warehouse) => warehouse.id === command.buyerWarehouseId && warehouse.companyId === command.buyerCompanyId)
+        : input.warehouses.find((warehouse) => warehouse.companyId === command.buyerCompanyId)) ?? null;
+    if (!product) {
+        throw new Error("UNKNOWN_PRODUCT");
+    }
+    if (!sellerWarehouse || !sellerCompany || sellerCompany.legalStatus !== "registered") {
+        throw new Error("UNKNOWN_OR_INACTIVE_RESOURCE_SELLER");
+    }
+    if (!buyerCompany || buyerCompany.ownerType !== "player" || buyerCompany.ownerId !== command.playerId || buyerCompany.legalStatus !== "registered") {
+        throw new Error("PLAYER_COMPANY_REQUIRED");
+    }
+    if (!buyerWarehouse) {
+        throw new Error("BUYER_WAREHOUSE_REQUIRED");
+    }
+    if (sellerCompany.currencyCode !== buyerCompany.currencyCode) {
+        throw new Error("CURRENCY_MISMATCH");
+    }
+    const availableQuantity = getAvailableQuantity(input.inventoryLots, sellerWarehouse.id, product.id);
+    if (availableQuantity < quantity) {
+        throw new Error("INSUFFICIENT_RESOURCE_INVENTORY");
+    }
+    const totalPriceMinor = sanitizeMoney(offer.unitPriceMinor * quantity);
+    const buyerAccount = getSettlementAccount(input.bankAccounts, "player", command.playerId, buyerCompany.currencyCode);
+    if (!buyerAccount) {
+        throw new Error("PLAYER_ACCOUNT_NOT_FOUND");
+    }
+    if (getAvailableCashMinor(buyerAccount) < totalPriceMinor) {
+        throw new Error("INSUFFICIENT_PLAYER_BALANCE");
+    }
+    const consumedQuantity = consumeInventory(input.inventoryLots, sellerWarehouse.id, product.id, quantity);
+    if (consumedQuantity < quantity) {
+        throw new Error("INSUFFICIENT_RESOURCE_INVENTORY");
+    }
+    addInventory({
+        inventoryLots: input.inventoryLots,
+        warehouseId: buyerWarehouse.id,
+        productId: product.id,
+        quantity,
+        quality: offer.quality,
+        lotId: `${input.seed}-lot-${input.tick}-${command.commandId}-${product.id}-resource`
+    });
+    buyerAccount.balanceMinor = sanitizeMoney(buyerAccount.balanceMinor - totalPriceMinor);
+    const sellerAccount = getSettlementAccount(input.bankAccounts, "company", sellerCompany.id, sellerCompany.currencyCode);
+    if (sellerAccount) {
+        sellerAccount.balanceMinor = sanitizeMoney(sellerAccount.balanceMinor + totalPriceMinor);
+    }
+    sellerCompany.cashBalanceMinor = sanitizeMoney(sellerCompany.cashBalanceMinor + totalPriceMinor);
+    const purchase = {
+        id: `${input.seed}-resource-purchase-${input.tick}-${command.commandId}`,
+        tick: input.tick,
+        playerId: command.playerId,
+        buyerCompanyId: buyerCompany.id,
+        sellerCompanyId: sellerCompany.id,
+        sellerWarehouseId: sellerWarehouse.id,
+        buyerWarehouseId: buyerWarehouse.id,
+        productId: product.id,
+        quantity,
+        unitPriceMinor: offer.unitPriceMinor,
+        totalPriceMinor,
+        quality: offer.quality,
+        status: "completed"
+    };
+    input.financialTransactions.push({
+        id: `${input.seed}-tx-${input.tick}-${command.commandId}-resource-purchase`,
+        tick: input.tick,
+        type: "ResourcePurchaseTransaction",
+        entries: [
+            {
+                ownerType: "bank_account",
+                ownerId: buyerAccount.id,
+                amountMinor: -totalPriceMinor,
+                currencyCode: buyerCompany.currencyCode
+            },
+            {
+                ownerType: "company",
+                ownerId: sellerCompany.id,
+                amountMinor: totalPriceMinor,
+                currencyCode: sellerCompany.currencyCode
+            }
+        ]
+    });
+    input.events.push({
+        id: `${input.seed}-event-${input.tick}-${command.commandId}-resource-purchased`,
+        tick: input.tick,
+        type: "ResourcePurchasedEvent",
+        message: `${buyerCompany.name} bought ${quantity} units of ${product.name}.`,
+        entityIds: [purchase.id, buyerCompany.id, sellerCompany.id, product.id, buyerWarehouse.id],
+        metadata: {
+            commandId: command.commandId,
+            purchaseId: purchase.id,
+            buyerCompanyId: buyerCompany.id,
+            sellerCompanyId: sellerCompany.id,
+            productId: product.id,
+            quantity,
+            totalPriceMinor
+        }
+    });
+    input.metrics.push({
+        id: `${input.seed}-metric-${input.tick}-${command.commandId}-resource-purchase`,
+        tick: input.tick,
+        name: "resource.purchase.quantity",
+        value: quantity,
+        tags: {
+            productId: product.id,
+            buyerCompanyId: buyerCompany.id,
+            sellerCompanyId: sellerCompany.id
+        }
+    });
+    input.news.push({
+        id: `${input.seed}-news-${input.tick}-${command.commandId}-resource-purchased`,
+        tick: input.tick,
+        category: "corporate",
+        templateId: null,
+        headline: `${buyerCompany.name} secures ${product.name}`,
+        body: `${quantity} units moved from ${sellerWarehouse.name} to ${buyerWarehouse.name} through a tick command resource purchase.`,
+        severity: "info",
+        relatedEntityIds: [buyerCompany.id, sellerCompany.id, product.id],
+        reliabilityId: null
+    });
+    return { purchase };
+}
+function applyRunManualProductionCommand(input, command) {
+    const requestedQuantity = sanitizeQuantity(command.requestedQuantity);
+    const company = input.companies.find((candidate) => candidate.id === command.companyId);
+    const plan = input.productionPlans.find((candidate) => candidate.id === command.productionPlanId && candidate.companyId === command.companyId);
+    if (!company || company.ownerType !== "player" || company.ownerId !== command.playerId || company.legalStatus !== "registered") {
+        throw new Error("PLAYER_COMPANY_REQUIRED");
+    }
+    if (!plan) {
+        throw new Error("UNKNOWN_PRODUCTION_PLAN");
+    }
+    if (requestedQuantity <= 0) {
+        throw new Error("INVALID_PRODUCTION_QUANTITY");
+    }
+    const warehouse = input.warehouses.find((candidate) => candidate.id === plan.warehouseId && candidate.companyId === company.id);
+    const outputProduct = input.state.products.find((candidate) => candidate.id === plan.outputProductId);
+    if (!warehouse) {
+        throw new Error("PRODUCTION_WAREHOUSE_REQUIRED");
+    }
+    if (!outputProduct) {
+        throw new Error("UNKNOWN_PRODUCT");
+    }
+    if (requiresIndustryLicense(input.state, company, outputProduct.category) && !hasActiveIndustryLicense(input.state, company, outputProduct.category)) {
+        throw new Error("COMPANY_LICENSE_REQUIRED");
+    }
+    const inputEfficiency = getTechnologyEffectForCompany({
+        technologies: input.state.technologies,
+        technologyLevels: input.state.technologyLevels
+    }, company, outputProduct, "inputEfficiency");
+    const outputLimit = sanitizeQuantity(Math.min(requestedQuantity, plan.outputQuantityPerTick));
+    const maxOutputByInputs = plan.inputs.reduce((maxOutput, productionInput) => {
+        const available = getAvailableQuantity(input.inventoryLots, plan.warehouseId, productionInput.productId);
+        const adjustedQuantityPerOutput = getAdjustedInputQuantityPerOutput(productionInput.quantityPerOutput, inputEfficiency);
+        const inputLimitedOutput = adjustedQuantityPerOutput > 0 ? Math.floor(available / adjustedQuantityPerOutput) : maxOutput;
+        return Math.min(maxOutput, inputLimitedOutput);
+    }, outputLimit);
+    const producedQuantity = sanitizeQuantity(maxOutputByInputs);
+    if (producedQuantity <= 0) {
+        throw new Error("INSUFFICIENT_PRODUCTION_INPUTS");
+    }
+    const inputConsumptions = [];
+    for (const productionInput of plan.inputs) {
+        const adjustedQuantityPerOutput = getAdjustedInputQuantityPerOutput(productionInput.quantityPerOutput, inputEfficiency);
+        const requestedInputQuantity = Math.ceil(producedQuantity * adjustedQuantityPerOutput);
+        const consumedQuantity = consumeInventory(input.inventoryLots, plan.warehouseId, productionInput.productId, requestedInputQuantity);
+        inputConsumptions.push({
+            productId: productionInput.productId,
+            quantity: consumedQuantity
+        });
+    }
+    addInventory({
+        inventoryLots: input.inventoryLots,
+        warehouseId: plan.warehouseId,
+        productId: plan.outputProductId,
+        quantity: producedQuantity,
+        quality: outputProduct.baseQuality,
+        lotId: `${input.seed}-lot-${input.tick}-${command.commandId}-manual-output`
+    });
+    const productionRun = {
+        id: `${input.seed}-production-run-${input.tick}-${command.commandId}`,
+        tick: input.tick,
+        playerId: command.playerId,
+        companyId: company.id,
+        productionPlanId: plan.id,
+        warehouseId: warehouse.id,
+        outputProductId: outputProduct.id,
+        requestedQuantity,
+        producedQuantity,
+        inputConsumptions,
+        status: "completed"
+    };
+    input.events.push({
+        id: `${input.seed}-event-${input.tick}-${command.commandId}-manual-production`,
+        tick: input.tick,
+        type: "ManualProductionRunEvent",
+        message: `${company.name} produced ${producedQuantity} units of ${outputProduct.name}.`,
+        entityIds: [productionRun.id, company.id, warehouse.id, outputProduct.id],
+        metadata: {
+            commandId: command.commandId,
+            productionRunId: productionRun.id,
+            companyId: company.id,
+            productId: outputProduct.id,
+            requestedQuantity,
+            producedQuantity
+        }
+    });
+    input.metrics.push({
+        id: `${input.seed}-metric-${input.tick}-${command.commandId}-manual-production`,
+        tick: input.tick,
+        name: "production.manual.output.quantity",
+        value: producedQuantity,
+        tags: {
+            companyId: company.id,
+            productId: outputProduct.id,
+            planId: plan.id
+        }
+    });
+    input.news.push({
+        id: `${input.seed}-news-${input.tick}-${command.commandId}-manual-production`,
+        tick: input.tick,
+        category: "corporate",
+        templateId: null,
+        headline: `${company.name} starts production`,
+        body: `${producedQuantity} units of ${outputProduct.name} were produced through a tick command from player-owned warehouse inventory.`,
+        severity: "info",
+        relatedEntityIds: [company.id, outputProduct.id, warehouse.id],
+        reliabilityId: null
+    });
+    return { productionRun };
+}
 function applyRetailPriceUpdate(input) {
     const priceMinor = sanitizeMoney(input.input.priceMinor);
     const company = input.state.companies.find((candidate) => candidate.id === input.input.companyId);
@@ -2311,22 +2839,122 @@ function applyRetailPriceUpdate(input) {
 function validateCommand(state, command) {
     if (command.type === "CreateCompanyCommand") {
         const countryExists = state.countries.some((country) => country.id === command.countryId);
-        return countryExists
-            ? null
-            : {
+        const normalizedName = command.name.trim();
+        const nameExists = state.companies.some((company) => company.countryId === command.countryId && company.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase());
+        if (!countryExists) {
+            return {
                 commandId: command.commandId,
                 code: "UNKNOWN_COUNTRY",
                 message: "Company cannot be registered in an unknown country."
             };
+        }
+        if (normalizedName.length < 2) {
+            return {
+                commandId: command.commandId,
+                code: "INVALID_COMPANY_NAME",
+                message: "Company name must contain at least two visible characters."
+            };
+        }
+        return nameExists
+            ? {
+                commandId: command.commandId,
+                code: "COMPANY_NAME_TAKEN",
+                message: "Company name is already registered in this country."
+            }
+            : null;
     }
     if (command.type === "BuyLandCommand") {
-        const cityExists = state.cities.some((city) => city.id === command.cityId);
-        return cityExists
-            ? null
-            : {
+        const city = state.cities.find((candidate) => candidate.id === command.cityId);
+        const company = state.companies.find((candidate) => candidate.id === command.companyId);
+        if (!city) {
+            return {
                 commandId: command.commandId,
                 code: "UNKNOWN_CITY",
                 message: "Land cannot be bought in an unknown city."
+            };
+        }
+        if (!company || company.ownerType !== "player" || company.ownerId !== command.playerId || company.legalStatus !== "registered") {
+            return {
+                commandId: command.commandId,
+                code: "PLAYER_COMPANY_REQUIRED",
+                message: "Land can only be acquired for a registered player company."
+            };
+        }
+        if (city.countryId !== company.countryId) {
+            return {
+                commandId: command.commandId,
+                code: "CITY_COMPANY_COUNTRY_MISMATCH",
+                message: "Company premises must be acquired in the company's registration country for the prototype."
+            };
+        }
+        if (state.warehouses.some((warehouse) => warehouse.companyId === company.id && warehouse.cityId === city.id)) {
+            return {
+                commandId: command.commandId,
+                code: "COMPANY_PREMISE_ALREADY_EXISTS",
+                message: "The company already has a premise in this city."
+            };
+        }
+        return null;
+    }
+    if (command.type === "BuyResourceCommand") {
+        const quantity = sanitizeQuantity(command.quantity);
+        const maxUnitPriceMinor = sanitizeMoney(command.maxUnitPriceMinor);
+        const offer = state.resourceOffers.find((candidate) => candidate.id === command.resourceOfferId);
+        const buyerCompany = state.companies.find((candidate) => candidate.id === command.buyerCompanyId);
+        if (!offer || !offer.active) {
+            return {
+                commandId: command.commandId,
+                code: "UNKNOWN_OR_INACTIVE_RESOURCE_OFFER",
+                message: "Resource purchase needs an active resource offer."
+            };
+        }
+        if (quantity <= 0 || maxUnitPriceMinor <= 0) {
+            return {
+                commandId: command.commandId,
+                code: "INVALID_RESOURCE_PURCHASE",
+                message: "Resource purchase quantity and max price must be positive."
+            };
+        }
+        if (!buyerCompany || buyerCompany.ownerType !== "player" || buyerCompany.ownerId !== command.playerId || buyerCompany.legalStatus !== "registered") {
+            return {
+                commandId: command.commandId,
+                code: "PLAYER_COMPANY_REQUIRED",
+                message: "Resource purchase requires a registered player company."
+            };
+        }
+        if (command.buyerWarehouseId && !state.warehouses.some((warehouse) => warehouse.id === command.buyerWarehouseId && warehouse.companyId === buyerCompany.id)) {
+            return {
+                commandId: command.commandId,
+                code: "BUYER_WAREHOUSE_REQUIRED",
+                message: "Resource purchase needs a warehouse owned by the buyer company."
+            };
+        }
+        return null;
+    }
+    if (command.type === "RunManualProductionCommand") {
+        const requestedQuantity = sanitizeQuantity(command.requestedQuantity);
+        const company = state.companies.find((candidate) => candidate.id === command.companyId);
+        const plan = state.productionPlans.find((candidate) => candidate.id === command.productionPlanId && candidate.companyId === command.companyId);
+        if (!company || company.ownerType !== "player" || company.ownerId !== command.playerId || company.legalStatus !== "registered") {
+            return {
+                commandId: command.commandId,
+                code: "PLAYER_COMPANY_REQUIRED",
+                message: "Manual production requires a registered player company."
+            };
+        }
+        if (!plan) {
+            return {
+                commandId: command.commandId,
+                code: "UNKNOWN_PRODUCTION_PLAN",
+                message: "Manual production requires an existing production plan."
+            };
+        }
+        return requestedQuantity > 0
+            ? null
+            : {
+                commandId: command.commandId,
+                code: "INVALID_PRODUCTION_QUANTITY",
+                message: "Manual production quantity must be positive."
             };
     }
     if (command.type === "SetRetailPriceCommand") {
@@ -4119,6 +4747,19 @@ function processWarAndGeopolitics(context) {
         if (war.status !== "active") {
             continue;
         }
+        if (context.nextTick <= 1) {
+            context.metrics.push({
+                id: `${context.seed}-metric-${context.nextTick}-${war.id}-intensity`,
+                tick: context.nextTick,
+                name: "war.intensity",
+                value: clamp(war.intensity, 0, 1),
+                tags: {
+                    warId: war.id,
+                    status: "stabilizing_start"
+                }
+            });
+            continue;
+        }
         applyWarBlockades(context, war);
         applyWarSanctions(context, war);
         for (const army of context.armies.filter((candidate) => candidate.warId === war.id)) {
@@ -4595,6 +5236,9 @@ function processCrimeAndBlackMarket(context) {
     });
 }
 function generateBlackMarkets(context) {
+    if (context.nextTick <= 1) {
+        return;
+    }
     for (const city of context.cities) {
         const country = context.countries.find((candidate) => candidate.id === city.countryId);
         if (!country) {
@@ -7434,4 +8078,3 @@ function average(values) {
     }
     return values.reduce((total, value) => total + value, 0) / values.length;
 }
-//# sourceMappingURL=index.js.map

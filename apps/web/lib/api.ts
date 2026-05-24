@@ -33,7 +33,6 @@ import type {
   Order,
   OrderBook,
   IllegalTrade,
-  PlayerCommand,
   Patent,
   Pollution,
   PortfolioPosition,
@@ -296,13 +295,25 @@ export interface ReputationDto {
 }
 
 export interface CreateCompanyInput {
-  readonly playerId: string;
   readonly countryId: string;
   readonly name: string;
 }
 
+export interface LandPurchaseInput {
+  readonly companyId: string;
+  readonly cityId: string;
+  readonly lotId?: string;
+  readonly mode?: "purchase" | "lease";
+}
+
+export interface LandPurchaseResponse {
+  readonly warehouse: Warehouse | null;
+  readonly productionPlan: WorldState["productionPlans"][number] | null;
+  readonly retailOffer: RetailOffer | null;
+  readonly event: unknown;
+}
+
 export interface ResourcePurchaseInput {
-  readonly playerId: string;
   readonly buyerCompanyId: string;
   readonly resourceOfferId: string;
   readonly quantity: number;
@@ -311,14 +322,12 @@ export interface ResourcePurchaseInput {
 }
 
 export interface ManualProductionInput {
-  readonly playerId: string;
   readonly companyId: string;
   readonly productionPlanId: string;
   readonly requestedQuantity: number;
 }
 
 export interface RetailPriceInput {
-  readonly playerId: string;
   readonly companyId: string;
   readonly retailOfferId: string;
   readonly priceMinor: number;
@@ -350,7 +359,6 @@ export interface CreateOrderInput {
 }
 
 export interface LobbyingInput {
-  readonly playerId: string;
   readonly countryId: string;
   readonly targetPartyId?: string;
   readonly lawType: LawType;
@@ -358,7 +366,6 @@ export interface LobbyingInput {
 }
 
 export interface MediaCampaignInput {
-  readonly playerId: string;
   readonly countryId: string;
   readonly targetPartyId?: string;
   readonly message: string;
@@ -366,7 +373,6 @@ export interface MediaCampaignInput {
 }
 
 export interface VoteInput {
-  readonly playerId: string;
   readonly countryId: string;
   readonly partyId: string;
   readonly choice: "for" | "against" | "abstain";
@@ -399,7 +405,7 @@ export interface CountryBudgetDto {
 
 export interface TickResponseDto {
   readonly summary: WorldSummaryDto;
-  readonly acceptedCommands: readonly PlayerCommand[];
+  readonly acceptedCommands: readonly string[];
   readonly events: readonly unknown[];
   readonly metrics: readonly Metric[];
   readonly news: readonly NewsItem[];
@@ -537,8 +543,15 @@ export async function runNextTick(): Promise<TickResponseDto> {
   });
 }
 
-export async function createCompany(input: CreateCompanyInput): Promise<unknown> {
-  return apiRequest("/companies", {
+export async function createCompany(input: CreateCompanyInput): Promise<WorldState["companies"][number]> {
+  return apiRequest<WorldState["companies"][number]>("/companies", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function purchaseLand(input: LandPurchaseInput): Promise<LandPurchaseResponse> {
+  return apiRequest<LandPurchaseResponse>("/land/purchase", {
     method: "POST",
     body: JSON.stringify(input)
   });
@@ -562,7 +575,6 @@ export async function setRetailPrice(input: RetailPriceInput): Promise<RetailPri
   return apiRequest<RetailPriceResponse>(`/retail/offers/${encodeURIComponent(input.retailOfferId)}/price`, {
     method: "POST",
     body: JSON.stringify({
-      playerId: input.playerId,
       companyId: input.companyId,
       priceMinor: input.priceMinor,
       currencyCode: input.currencyCode

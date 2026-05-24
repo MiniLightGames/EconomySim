@@ -54,3 +54,47 @@ export function assertLedgerTransactionBalanced(transaction: LedgerTransactionIn
     throw new Error(result.errors.join(" "));
   }
 }
+
+export interface AuthUserRecord {
+  readonly id: string;
+  readonly email: string | null;
+  readonly displayName: string;
+}
+
+export interface PlayerRecord {
+  readonly id: string;
+  readonly userId: string;
+  readonly defaultCurrencyCode: string;
+}
+
+export interface SessionRecord {
+  readonly id: string;
+  readonly userId: string;
+  readonly playerId: string;
+  readonly expiresAt: Date;
+}
+
+export interface WorldPersistenceContract {
+  readonly mode: "snapshot-plus-normalized";
+  saveSnapshotAndCoreEntities(input: {
+    readonly state: unknown;
+    readonly tick: number;
+    readonly stateHash: string;
+  }): Promise<void>;
+  appendAudit(input: {
+    readonly userId: string | null;
+    readonly playerId: string | null;
+    readonly actionType: string;
+    readonly payloadHash: string;
+    readonly tick: number;
+    readonly result: "accepted" | "rejected" | "failed";
+    readonly affectedEntities: readonly string[];
+  }): Promise<void>;
+}
+
+export const PERSISTENCE_CONTRACT_NOTES = [
+  "Snapshots remain the rollback safety layer.",
+  "Companies, accounts, warehouses, production plans, offers, inventory lots, operation records, events, and metrics are durable normalized rows.",
+  "All command writes must be executed inside a Prisma transaction boundary before the snapshot is appended.",
+  "Auth binds user -> session -> player on the backend; request bodies are not trusted for playerId."
+] as const;

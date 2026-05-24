@@ -1,8 +1,7 @@
 import { ECONOMY_INVARIANTS, summarizeWorld } from "@economysim/domain";
-import type { BankAccount, Company, DemandRecord, Product, PublicStatistic, RetailOffer, WorldState } from "@economysim/domain";
+import type { BankAccount, Company, DemandRecord, PlayerCommand, Product, PublicStatistic, RetailOffer, WorldState } from "@economysim/domain";
 import {
   applyForLoan,
-  buyResource,
   castVote,
   createIllegalTrade,
   createShipment,
@@ -10,9 +9,7 @@ import {
   payLoan,
   placeOrder,
   runMediaCampaign,
-  runManualProduction,
   runTick,
-  setRetailOfferPrice,
   startResearchProject
 } from "@economysim/simulation-core";
 import type { FastifyInstance } from "fastify";
@@ -20,6 +17,7 @@ import { buildMarkets } from "./market";
 import { badRequest, notFound } from "./errors";
 import {
   createCompanyBodySchema,
+  landPurchaseBodySchema,
   illegalTradeBodySchema,
   createOrderBodySchema,
   createShipmentBodySchema,
@@ -36,8 +34,9 @@ import {
   simulationTickBodySchema,
   voteBodySchema
 } from "./schemas";
-import { addCompanyToWorld, type WorldStore } from "./store";
+import type { WorldStore } from "./store";
 import { validatePlayerCommandsAgainstWorld } from "./validation";
+import { bindCommandToSession, resolvePlayerSession } from "./auth";
 
 export interface RouteDependencies {
   readonly store: WorldStore;
@@ -184,12 +183,60 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
 
   app.post("/companies", async (request, reply) => {
     const body = createCompanyBodySchema.parse(request.body);
+    const session = resolvePlayerSession(request);
     const state = await store.loadWorld();
-    const result = addCompanyToWorld(state, body);
+    const command: PlayerCommand = bindCommandToSession(
+      {
+        type: "CreateCompanyCommand" as const,
+        commandId: makeCommandId(seed, state.currentTick, "create-company"),
+        countryId: body.countryId,
+        name: body.name
+      },
+      session
+    ) as PlayerCommand;
+    const result = runValidatedCommand(state, command, seed);
+    const companyId = getEventMetadataString(result.events, "CompanyRegisteredEvent", "companyId");
+    const company = result.state.companies.find((candidate) => candidate.id === companyId);
+
+    if (!company) {
+      throw badRequest("COMPANY_COMMAND_DID_NOT_CREATE_ENTITY", "CreateCompanyCommand was accepted but no company entity was created.", {
+        commandId: command.commandId
+      });
+    }
 
     await store.saveWorld(result.state);
 
-    return reply.status(201).send(result.company);
+    return reply.status(201).send(company);
+  });
+
+  app.post("/land/purchase", async (request, reply) => {
+    const body = landPurchaseBodySchema.parse(request.body);
+    const session = resolvePlayerSession(request);
+    const state = await store.loadWorld();
+    const command: PlayerCommand = bindCommandToSession(
+      {
+        type: "BuyLandCommand" as const,
+        commandId: makeCommandId(seed, state.currentTick, "buy-land"),
+        companyId: body.companyId,
+        cityId: body.cityId,
+        lotId: body.lotId ?? `${body.cityId}-starter-premise`,
+        mode: body.mode
+      },
+      session
+    ) as PlayerCommand;
+    const result = runValidatedCommand(state, command, seed);
+    const warehouseId = getEventMetadataString(result.events, "LandPremiseAcquiredEvent", "warehouseId");
+    const productionPlanId = getEventMetadataString(result.events, "LandPremiseAcquiredEvent", "productionPlanId");
+    const retailOfferId = getEventMetadataString(result.events, "LandPremiseAcquiredEvent", "retailOfferId");
+
+    await store.saveWorld(result.state);
+
+    return reply.status(201).send({
+      warehouse: result.state.warehouses.find((candidate) => candidate.id === warehouseId) ?? null,
+      productionPlan: result.state.productionPlans.find((candidate) => candidate.id === productionPlanId) ?? null,
+      retailOffer: result.state.retailOffers.find((candidate) => candidate.id === retailOfferId) ?? null,
+      event: result.events.find((event) => event.type === "LandPremiseAcquiredEvent") ?? null
+    });
   });
 
   app.get("/markets", async () => {
@@ -223,22 +270,44 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
   app.post("/retail/offers/:id/price", async (request, reply) => {
     const { id } = idParamsSchema.parse(request.params);
     const body = retailPriceBodySchema.parse(request.body);
+    const session = resolvePlayerSession(request);
     const state = await store.loadWorld();
+    const offer = state.retailOffers.find((candidate) => candidate.id === id);
+
+    if (!offer || !offer.active) {
+      throw badRequest("UNKNOWN_RETAIL_OFFER", "Retail price cannot be set without an active company offer.", { retailOfferId: id });
+    }
+
+    const company = state.companies.find((candidate) => candidate.id === body.companyId);
+    const command: PlayerCommand = bindCommandToSession(
+      {
+        type: "SetRetailPriceCommand" as const,
+        commandId: makeCommandId(seed, state.currentTick, "set-retail-price"),
+        companyId: body.companyId,
+        productId: offer.productId,
+        priceMinor: body.priceMinor,
+        currencyCode: body.currencyCode ?? company?.currencyCode ?? "NCR"
+      },
+      session
+    ) as PlayerCommand;
 
     try {
-      const result = setRetailOfferPrice(
-        state,
-        {
-          ...body,
+      const result = runValidatedCommand(state, command, seed);
+      const updatedOffer = result.state.retailOffers.find((candidate) => candidate.id === id);
+      const priceChange = [...result.state.retailPriceChanges].reverse().find((change) => change.retailOfferId === id) ?? null;
+
+      if (!updatedOffer || !priceChange) {
+        throw badRequest("RETAIL_PRICE_COMMAND_DID_NOT_UPDATE_ENTITY", "SetRetailPriceCommand was accepted but no price change was recorded.", {
+          commandId: command.commandId,
           retailOfferId: id
-        },
-        seed
-      );
+        });
+      }
+
       await store.saveWorld(result.state);
 
       return reply.status(200).send({
-        offer: toRetailOfferDto(result.retailOffer, result.state),
-        priceChange: result.priceChange
+        offer: toRetailOfferDto(updatedOffer, result.state),
+        priceChange
       });
     } catch (error) {
       throw mapOperationsError(error);
@@ -274,13 +343,30 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
 
   app.post("/resources/purchase", async (request, reply) => {
     const body = resourcePurchaseBodySchema.parse(request.body);
+    const session = resolvePlayerSession(request);
     const state = await store.loadWorld();
+    const command: PlayerCommand = bindCommandToSession(
+      {
+        type: "BuyResourceCommand" as const,
+        commandId: makeCommandId(seed, state.currentTick, "buy-resource"),
+        ...body
+      },
+      session
+    ) as PlayerCommand;
 
     try {
-      const result = buyResource(state, body, seed);
+      const result = runValidatedCommand(state, command, seed);
+      const purchase = result.state.resourcePurchases.find((candidate) => candidate.id === `${seed}-resource-purchase-${result.state.currentTick}-${command.commandId}`);
+
+      if (!purchase) {
+        throw badRequest("RESOURCE_COMMAND_DID_NOT_RECORD_PURCHASE", "BuyResourceCommand was accepted but no purchase was recorded.", {
+          commandId: command.commandId
+        });
+      }
+
       await store.saveWorld(result.state);
 
-      return reply.status(201).send(result.purchase);
+      return reply.status(201).send(purchase);
     } catch (error) {
       throw mapOperationsError(error);
     }
@@ -298,13 +384,32 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
 
   app.post("/production/run", async (request, reply) => {
     const body = manualProductionBodySchema.parse(request.body);
+    const session = resolvePlayerSession(request);
     const state = await store.loadWorld();
+    const command: PlayerCommand = bindCommandToSession(
+      {
+        type: "RunManualProductionCommand" as const,
+        commandId: makeCommandId(seed, state.currentTick, "run-production"),
+        ...body
+      },
+      session
+    ) as PlayerCommand;
 
     try {
-      const result = runManualProduction(state, body, seed);
+      const result = runValidatedCommand(state, command, seed);
+      const productionRun = result.state.manualProductionRuns.find(
+        (candidate) => candidate.id === `${seed}-production-run-${result.state.currentTick}-${command.commandId}`
+      );
+
+      if (!productionRun) {
+        throw badRequest("PRODUCTION_COMMAND_DID_NOT_RECORD_RUN", "RunManualProductionCommand was accepted but no production run was recorded.", {
+          commandId: command.commandId
+        });
+      }
+
       await store.saveWorld(result.state);
 
-      return reply.status(201).send(result.productionRun);
+      return reply.status(201).send(productionRun);
     } catch (error) {
       throw mapOperationsError(error);
     }
@@ -685,10 +790,11 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
 
   app.post("/lobbying", async (request, reply) => {
     const body = lobbyingBodySchema.parse(request.body);
+    const session = resolvePlayerSession(request);
     const state = await store.loadWorld();
 
     try {
-      const result = fundLobbying(state, body, seed);
+      const result = fundLobbying(state, { ...body, playerId: session.playerId }, seed);
       await store.saveWorld(result.state);
 
       return reply.status(201).send(result.action);
@@ -699,10 +805,11 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
 
   app.post("/media-campaigns", async (request, reply) => {
     const body = mediaCampaignBodySchema.parse(request.body);
+    const session = resolvePlayerSession(request);
     const state = await store.loadWorld();
 
     try {
-      const result = runMediaCampaign(state, body, seed);
+      const result = runMediaCampaign(state, { ...body, playerId: session.playerId }, seed);
       await store.saveWorld(result.state);
 
       return reply.status(201).send(result.influence);
@@ -713,10 +820,11 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
 
   app.post("/vote", async (request) => {
     const body = voteBodySchema.parse(request.body);
+    const session = resolvePlayerSession(request);
     const state = await store.loadWorld();
 
     try {
-      const result = castVote(state, body, seed);
+      const result = castVote(state, { ...body, playerId: session.playerId }, seed);
       await store.saveWorld(result.state);
 
       return result.election;
@@ -727,13 +835,15 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
 
   app.post("/simulation/tick", async (request) => {
     const body = simulationTickBodySchema.parse(request.body ?? {});
+    const session = resolvePlayerSession(request);
+    const commands = body.commands.map((command) => bindCommandToSession(command, session) as PlayerCommand);
     const state = await store.loadWorld();
 
-    validatePlayerCommandsAgainstWorld(state, body.commands);
+    validatePlayerCommandsAgainstWorld(state, commands);
 
     const result = runTick({
       state,
-      commands: body.commands,
+      commands,
       seed
     });
 
@@ -763,6 +873,33 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
     const state = await store.loadWorld();
     return state.metrics;
   });
+}
+
+function runValidatedCommand(state: WorldState, command: PlayerCommand, seed: string) {
+  validatePlayerCommandsAgainstWorld(state, [command]);
+
+  const result = runTick({
+    state,
+    commands: [command],
+    seed
+  });
+
+  if (result.rejectedCommands.length > 0) {
+    throw badRequest("COMMAND_REJECTED", "The player command was rejected by simulation validation.", {
+      rejectedCommands: result.rejectedCommands
+    });
+  }
+
+  return result;
+}
+
+function makeCommandId(seed: string, currentTick: number, action: string): string {
+  return `${seed}-cmd-${currentTick + 1}-${action}`;
+}
+
+function getEventMetadataString(events: readonly { readonly type: string; readonly metadata: Readonly<Record<string, string | number | boolean>> }[], type: string, key: string): string | null {
+  const value = events.find((event) => event.type === type)?.metadata[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function toPublicWorldState(state: WorldState): WorldState {
@@ -899,6 +1036,16 @@ function mapOperationsError(error: unknown) {
     "INSUFFICIENT_RESOURCE_INVENTORY",
     "PLAYER_ACCOUNT_NOT_FOUND",
     "INSUFFICIENT_PLAYER_BALANCE",
+    "COMPANY_NAME_TAKEN",
+    "INVALID_COMPANY_NAME",
+    "UNKNOWN_COUNTRY",
+    "UNKNOWN_CITY",
+    "CITY_COMPANY_COUNTRY_MISMATCH",
+    "COMPANY_PREMISE_ALREADY_EXISTS",
+    "COMPANY_COMMAND_DID_NOT_CREATE_ENTITY",
+    "RESOURCE_COMMAND_DID_NOT_RECORD_PURCHASE",
+    "PRODUCTION_COMMAND_DID_NOT_RECORD_RUN",
+    "RETAIL_PRICE_COMMAND_DID_NOT_UPDATE_ENTITY",
     "UNKNOWN_PRODUCTION_PLAN",
     "INVALID_PRODUCTION_QUANTITY",
     "PRODUCTION_WAREHOUSE_REQUIRED",
@@ -1010,6 +1157,16 @@ function mapGovernmentError(error: unknown) {
     "INVALID_POLITICAL_SPEND",
     "PLAYER_ACCOUNT_NOT_FOUND",
     "INSUFFICIENT_PLAYER_BALANCE",
+    "COMPANY_NAME_TAKEN",
+    "INVALID_COMPANY_NAME",
+    "UNKNOWN_COUNTRY",
+    "UNKNOWN_CITY",
+    "CITY_COMPANY_COUNTRY_MISMATCH",
+    "COMPANY_PREMISE_ALREADY_EXISTS",
+    "COMPANY_COMMAND_DID_NOT_CREATE_ENTITY",
+    "RESOURCE_COMMAND_DID_NOT_RECORD_PURCHASE",
+    "PRODUCTION_COMMAND_DID_NOT_RECORD_RUN",
+    "RETAIL_PRICE_COMMAND_DID_NOT_UPDATE_ENTITY",
     "INVALID_MEDIA_CAMPAIGN",
     "VOTER_HAS_NO_ASSETS",
     "NO_ACTIVE_ELECTION"

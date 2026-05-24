@@ -103,6 +103,129 @@ describe("runTick", () => {
     expect(result.state.news.some((news) => news.headline === "Food shortage detected")).toBe(true);
   });
 
+
+  it("keeps the initial tick close to equilibrium without instant war shocks or black-market avalanche", () => {
+    const state = createInitialWorldState("balanced-start");
+    const result = runTick({ state, commands: [], seed: "balanced-start" });
+
+    expect(result.state.blackMarkets).toHaveLength(0);
+    expect(result.state.warDamage).toHaveLength(0);
+    expect(result.state.occupations).toHaveLength(0);
+    expect(result.metrics.some((metric) => metric.name === "war.intensity")).toBe(true);
+  });
+
+  it("runs the first player business vertical slice only through tick commands", () => {
+    let state = createInitialWorldState("ops-command-vertical");
+    const created = runTick({
+      state,
+      seed: "ops-command-vertical",
+      commands: [
+        {
+          type: "CreateCompanyCommand",
+          commandId: "cmd-create-player-bakery",
+          playerId: "player-1",
+          countryId: "ops-command-vertical-country-north-coast",
+          name: "Nova Foods"
+        }
+      ]
+    });
+    const companyId = created.events.find((event) => event.type === "CompanyRegisteredEvent")?.metadata.companyId;
+
+    expect(created.acceptedCommands).toContain("cmd-create-player-bakery");
+    expect(typeof companyId).toBe("string");
+
+    state = created.state;
+    const premises = runTick({
+      state,
+      seed: "ops-command-vertical",
+      commands: [
+        {
+          type: "BuyLandCommand",
+          commandId: "cmd-buy-premise",
+          playerId: "player-1",
+          companyId: companyId as string,
+          cityId: "ops-command-vertical-city-harborview",
+          lotId: "ops-command-vertical-harborview-starter-premise",
+          mode: "purchase"
+        }
+      ]
+    });
+    const premiseEvent = premises.events.find((event) => event.type === "LandPremiseAcquiredEvent");
+    const warehouseId = premiseEvent?.metadata.warehouseId;
+    const productionPlanId = premiseEvent?.metadata.productionPlanId;
+
+    expect(premises.acceptedCommands).toContain("cmd-buy-premise");
+    expect(typeof warehouseId).toBe("string");
+    expect(typeof productionPlanId).toBe("string");
+
+    state = premises.state;
+    const purchased = runTick({
+      state,
+      seed: "ops-command-vertical",
+      commands: [
+        {
+          type: "BuyResourceCommand",
+          commandId: "cmd-buy-wheat",
+          playerId: "player-1",
+          buyerCompanyId: companyId as string,
+          buyerWarehouseId: warehouseId as string,
+          resourceOfferId: "ops-command-vertical-resource-offer-grainford-wheat",
+          quantity: 1_000,
+          maxUnitPriceMinor: 100
+        }
+      ]
+    });
+
+    expect(purchased.acceptedCommands).toContain("cmd-buy-wheat");
+    expect(purchased.state.financialTransactions.some((transaction) => transaction.type === "ResourcePurchaseTransaction")).toBe(true);
+
+    state = purchased.state;
+    const produced = runTick({
+      state,
+      seed: "ops-command-vertical",
+      commands: [
+        {
+          type: "RunManualProductionCommand",
+          commandId: "cmd-produce-bread",
+          playerId: "player-1",
+          companyId: companyId as string,
+          productionPlanId: productionPlanId as string,
+          requestedQuantity: 500
+        }
+      ]
+    });
+
+    expect(produced.acceptedCommands).toContain("cmd-produce-bread");
+    expect(produced.events.some((event) => event.type === "ManualProductionRunEvent")).toBe(true);
+
+    state = produced.state;
+    const priced = runTick({
+      state,
+      seed: "ops-command-vertical",
+      commands: [
+        {
+          type: "SetRetailPriceCommand",
+          commandId: "cmd-price-bread",
+          playerId: "player-1",
+          companyId: companyId as string,
+          productId: "ops-command-vertical-product-bread",
+          priceMinor: 250,
+          currencyCode: "NCR"
+        }
+      ]
+    });
+
+    expect(priced.acceptedCommands).toContain("cmd-price-bread");
+    expect(priced.state.retailPriceChanges.some((change) => change.companyId === companyId)).toBe(true);
+
+    const settled = runTick({ state: priced.state, commands: [], seed: "ops-command-vertical" });
+    const playerSales = settled.state.events.filter((event) => event.type === "ProductSoldEvent" && event.entityIds.includes(companyId as string));
+
+    expect(playerSales.length).toBeGreaterThan(0);
+    expect(settled.state.news.some((news) => news.relatedEntityIds.includes(companyId as string))).toBe(true);
+    expect(() => assertNoInvalidEconomyValues(settled.state)).not.toThrow();
+  });
+
   it("does not create negative, NaN, or infinite economy values", () => {
     const state = createInitialWorldState("validity");
     const result = runTick({ state, commands: [], seed: "validity" });

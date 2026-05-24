@@ -5,15 +5,21 @@ export const idParamsSchema = z.object({
 });
 
 export const createCompanyBodySchema = z.object({
-  playerId: z.string().trim().min(1).max(128),
   countryId: z.string().trim().min(1).max(160),
   name: z.string().trim().min(2).max(80)
+});
+
+export const landPurchaseBodySchema = z.object({
+  companyId: z.string().trim().min(1).max(160),
+  cityId: z.string().trim().min(1).max(160),
+  lotId: z.string().trim().min(1).max(160).optional(),
+  mode: z.enum(["purchase", "lease"]).default("purchase")
 });
 
 export const createCompanyCommandSchema = z.object({
   type: z.literal("CreateCompanyCommand"),
   commandId: z.string().trim().min(1).max(160),
-  playerId: z.string().trim().min(1).max(128),
+  playerId: z.string().trim().min(1).max(128).optional(),
   countryId: z.string().trim().min(1).max(160),
   name: z.string().trim().min(2).max(80)
 });
@@ -21,15 +27,37 @@ export const createCompanyCommandSchema = z.object({
 export const buyLandCommandSchema = z.object({
   type: z.literal("BuyLandCommand"),
   commandId: z.string().trim().min(1).max(160),
-  playerId: z.string().trim().min(1).max(128),
+  playerId: z.string().trim().min(1).max(128).optional(),
+  companyId: z.string().trim().min(1).max(160),
   cityId: z.string().trim().min(1).max(160),
-  lotId: z.string().trim().min(1).max(160)
+  lotId: z.string().trim().min(1).max(160),
+  mode: z.enum(["purchase", "lease"]).optional()
+});
+
+export const buyResourceCommandSchema = z.object({
+  type: z.literal("BuyResourceCommand"),
+  commandId: z.string().trim().min(1).max(160),
+  playerId: z.string().trim().min(1).max(128).optional(),
+  buyerCompanyId: z.string().trim().min(1).max(160),
+  resourceOfferId: z.string().trim().min(1).max(160),
+  quantity: z.number().int().positive().max(1_000_000_000),
+  maxUnitPriceMinor: z.number().int().positive().max(10_000_000_000),
+  buyerWarehouseId: z.string().trim().min(1).max(160).optional()
+});
+
+export const runManualProductionCommandSchema = z.object({
+  type: z.literal("RunManualProductionCommand"),
+  commandId: z.string().trim().min(1).max(160),
+  playerId: z.string().trim().min(1).max(128).optional(),
+  companyId: z.string().trim().min(1).max(160),
+  productionPlanId: z.string().trim().min(1).max(160),
+  requestedQuantity: z.number().int().positive().max(1_000_000_000)
 });
 
 export const setRetailPriceCommandSchema = z.object({
   type: z.literal("SetRetailPriceCommand"),
   commandId: z.string().trim().min(1).max(160),
-  playerId: z.string().trim().min(1).max(128),
+  playerId: z.string().trim().min(1).max(128).optional(),
   companyId: z.string().trim().min(1).max(160),
   productId: z.string().trim().min(1).max(160),
   priceMinor: z.number().int().positive().max(1_000_000_000),
@@ -39,6 +67,8 @@ export const setRetailPriceCommandSchema = z.object({
 export const playerCommandSchema = z.discriminatedUnion("type", [
   createCompanyCommandSchema,
   buyLandCommandSchema,
+  buyResourceCommandSchema,
+  runManualProductionCommandSchema,
   setRetailPriceCommandSchema
 ]);
 
@@ -58,7 +88,6 @@ export const createShipmentBodySchema = z.object({
 });
 
 export const resourcePurchaseBodySchema = z.object({
-  playerId: z.string().trim().min(1).max(128),
   buyerCompanyId: z.string().trim().min(1).max(160),
   resourceOfferId: z.string().trim().min(1).max(160),
   quantity: z.number().int().positive().max(1_000_000_000),
@@ -67,14 +96,12 @@ export const resourcePurchaseBodySchema = z.object({
 });
 
 export const manualProductionBodySchema = z.object({
-  playerId: z.string().trim().min(1).max(128),
   companyId: z.string().trim().min(1).max(160),
   productionPlanId: z.string().trim().min(1).max(160),
   requestedQuantity: z.number().int().positive().max(1_000_000_000)
 });
 
 export const retailPriceBodySchema = z.object({
-  playerId: z.string().trim().min(1).max(128),
   companyId: z.string().trim().min(1).max(160),
   priceMinor: z.number().int().positive().max(1_000_000_000),
   currencyCode: z.enum(["ECO", "NCR", "SOV"]).optional()
@@ -135,7 +162,6 @@ const lawTypeSchema = z.enum([
 ]);
 
 export const lobbyingBodySchema = z.object({
-  playerId: z.string().trim().min(1).max(128),
   countryId: z.string().trim().min(1).max(160),
   targetPartyId: z.string().trim().min(1).max(160).optional(),
   lawType: lawTypeSchema,
@@ -143,7 +169,6 @@ export const lobbyingBodySchema = z.object({
 });
 
 export const mediaCampaignBodySchema = z.object({
-  playerId: z.string().trim().min(1).max(128),
   countryId: z.string().trim().min(1).max(160),
   targetPartyId: z.string().trim().min(1).max(160).optional(),
   message: z.string().trim().min(2).max(240),
@@ -151,7 +176,6 @@ export const mediaCampaignBodySchema = z.object({
 });
 
 export const voteBodySchema = z.object({
-  playerId: z.string().trim().min(1).max(128),
   countryId: z.string().trim().min(1).max(160),
   partyId: z.string().trim().min(1).max(160),
   choice: z.enum(["for", "against", "abstain"]).default("for")
@@ -165,6 +189,7 @@ export const portfolioQuerySchema = z
   .default({ ownerType: "player", ownerId: "player-1" });
 
 export type CreateCompanyBody = z.infer<typeof createCompanyBodySchema>;
+export type LandPurchaseBody = z.infer<typeof landPurchaseBodySchema>;
 export type CreateShipmentBody = z.infer<typeof createShipmentBodySchema>;
 export type ResourcePurchaseBody = z.infer<typeof resourcePurchaseBodySchema>;
 export type ManualProductionBody = z.infer<typeof manualProductionBodySchema>;

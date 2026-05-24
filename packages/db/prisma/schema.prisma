@@ -6,6 +6,43 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+model User {
+  id          String    @id
+  email       String?   @unique
+  displayName String
+  players     Player[]
+  sessions    Session[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Player {
+  id                  String    @id
+  userId              String
+  defaultCurrencyCode String    @default("NCR")
+  user                User      @relation(fields: [userId], references: [id])
+  sessions            Session[]
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Session {
+  id        String   @id
+  userId    String
+  playerId  String
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id])
+  player    Player   @relation(fields: [playerId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([playerId])
+  @@index([expiresAt])
+}
+
 
 model Country {
   id              String    @id @default(cuid())

@@ -64,8 +64,29 @@ interface PrismaSnapshotDelegate {
   create(args: unknown): Promise<unknown>;
 }
 
+interface PrismaWriteDelegate {
+  upsert?(args: unknown): Promise<unknown>;
+  create?(args: unknown): Promise<unknown>;
+  createMany?(args: unknown): Promise<unknown>;
+}
+
 export interface PrismaClientLike {
   readonly snapshot: PrismaSnapshotDelegate;
+  readonly company?: PrismaWriteDelegate;
+  readonly warehouse?: PrismaWriteDelegate;
+  readonly bankAccount?: PrismaWriteDelegate;
+  readonly creditScore?: PrismaWriteDelegate;
+  readonly productionPlan?: PrismaWriteDelegate;
+  readonly retailOffer?: PrismaWriteDelegate;
+  readonly inventoryLot?: PrismaWriteDelegate;
+  readonly resourcePurchase?: PrismaWriteDelegate;
+  readonly manualProductionRun?: PrismaWriteDelegate;
+  readonly retailPriceChange?: PrismaWriteDelegate;
+  readonly financialTransaction?: PrismaWriteDelegate;
+  readonly event?: PrismaWriteDelegate;
+  readonly metric?: PrismaWriteDelegate;
+  readonly auditLog?: PrismaWriteDelegate;
+  $transaction?<T>(fn: (tx: PrismaClientLike) => Promise<T>): Promise<T>;
   $queryRawUnsafe(query: string): Promise<unknown>;
   $disconnect(): Promise<void>;
 }
@@ -107,14 +128,25 @@ export class PrismaWorldStore implements WorldStore {
       snapshots: [...state.snapshots, snapshot]
     };
 
-    await this.prisma.snapshot.create({
-      data: {
-        id: snapshot.id,
-        tick: snapshot.tick,
-        stateHash: snapshot.stateHash,
-        payload: persistedState
-      }
+    await this.writeTransaction(async (tx) => {
+      await persistNormalizedWorldState(tx, persistedState);
+      await tx.snapshot.create({
+        data: {
+          id: snapshot.id,
+          tick: snapshot.tick,
+          stateHash: snapshot.stateHash,
+          payload: persistedState
+        }
+      });
     });
+  }
+
+  private async writeTransaction<T>(fn: (tx: PrismaClientLike) => Promise<T>): Promise<T> {
+    if (this.prisma.$transaction) {
+      return this.prisma.$transaction(fn);
+    }
+
+    return fn(this.prisma);
   }
 
   async health(): Promise<StoreHealth> {
@@ -135,6 +167,311 @@ export class PrismaWorldStore implements WorldStore {
 
   async close(): Promise<void> {
     await this.prisma.$disconnect();
+  }
+}
+
+
+async function persistNormalizedWorldState(prisma: PrismaClientLike, state: WorldState): Promise<void> {
+  for (const company of state.companies) {
+    await prisma.company?.upsert?.({
+      where: { id: company.id },
+      update: {
+        ownerType: company.ownerType,
+        ownerId: company.ownerId,
+        countryId: company.countryId,
+        name: company.name,
+        legalStatus: company.legalStatus,
+        cashBalanceMinor: BigInt(company.cashBalanceMinor),
+        currencyCode: company.currencyCode,
+        reputation: company.reputation,
+        bankruptcyStatus: company.bankruptcyStatus
+      },
+      create: {
+        id: company.id,
+        ownerType: company.ownerType,
+        ownerId: company.ownerId,
+        countryId: company.countryId,
+        name: company.name,
+        legalStatus: company.legalStatus,
+        cashBalanceMinor: BigInt(company.cashBalanceMinor),
+        currencyCode: company.currencyCode,
+        reputation: company.reputation,
+        bankruptcyStatus: company.bankruptcyStatus
+      }
+    });
+  }
+
+  for (const account of state.bankAccounts) {
+    await prisma.bankAccount?.upsert?.({
+      where: { id: account.id },
+      update: {
+        bankId: account.bankId,
+        ownerType: account.ownerType,
+        ownerId: account.ownerId,
+        accountType: account.accountType,
+        currencyCode: account.currencyCode,
+        balanceMinor: BigInt(account.balanceMinor),
+        reservedMinor: BigInt(account.reservedMinor),
+        insured: account.insured,
+        status: account.status
+      },
+      create: {
+        id: account.id,
+        bankId: account.bankId,
+        ownerType: account.ownerType,
+        ownerId: account.ownerId,
+        accountType: account.accountType,
+        currencyCode: account.currencyCode,
+        balanceMinor: BigInt(account.balanceMinor),
+        reservedMinor: BigInt(account.reservedMinor),
+        insured: account.insured,
+        status: account.status
+      }
+    });
+  }
+
+  for (const score of state.creditScores) {
+    await prisma.creditScore?.upsert?.({
+      where: { id: score.id },
+      update: {
+        borrowerType: score.borrowerType,
+        borrowerId: score.borrowerId,
+        score: score.score,
+        probabilityOfDefault: score.probabilityOfDefault,
+        lastUpdatedTick: score.lastUpdatedTick
+      },
+      create: {
+        id: score.id,
+        borrowerType: score.borrowerType,
+        borrowerId: score.borrowerId,
+        score: score.score,
+        probabilityOfDefault: score.probabilityOfDefault,
+        lastUpdatedTick: score.lastUpdatedTick
+      }
+    });
+  }
+
+  for (const warehouse of state.warehouses) {
+    await prisma.warehouse?.upsert?.({
+      where: { id: warehouse.id },
+      update: {
+        companyId: warehouse.companyId,
+        cityId: warehouse.cityId,
+        name: warehouse.name,
+        warehouseType: warehouse.warehouseType,
+        capacity: warehouse.capacity,
+        handlingCostMinorPerUnit: warehouse.handlingCostMinorPerUnit
+      },
+      create: {
+        id: warehouse.id,
+        companyId: warehouse.companyId,
+        cityId: warehouse.cityId,
+        name: warehouse.name,
+        warehouseType: warehouse.warehouseType,
+        capacity: warehouse.capacity,
+        handlingCostMinorPerUnit: warehouse.handlingCostMinorPerUnit
+      }
+    });
+  }
+
+  for (const lot of state.inventoryLots) {
+    await prisma.inventoryLot?.upsert?.({
+      where: { id: lot.id },
+      update: {
+        warehouseId: lot.warehouseId,
+        productId: lot.productId,
+        quantity: lot.quantity,
+        quality: lot.quality
+      },
+      create: {
+        id: lot.id,
+        warehouseId: lot.warehouseId,
+        productId: lot.productId,
+        quantity: lot.quantity,
+        quality: lot.quality
+      }
+    });
+  }
+
+  for (const plan of state.productionPlans) {
+    await prisma.productionPlan?.upsert?.({
+      where: { id: plan.id },
+      update: {
+        companyId: plan.companyId,
+        warehouseId: plan.warehouseId,
+        outputProductId: plan.outputProductId,
+        outputQuantityPerTick: plan.outputQuantityPerTick,
+        inputs: plan.inputs,
+        active: plan.active
+      },
+      create: {
+        id: plan.id,
+        companyId: plan.companyId,
+        warehouseId: plan.warehouseId,
+        outputProductId: plan.outputProductId,
+        outputQuantityPerTick: plan.outputQuantityPerTick,
+        inputs: plan.inputs,
+        active: plan.active
+      }
+    });
+  }
+
+  for (const offer of state.retailOffers) {
+    await prisma.retailOffer?.upsert?.({
+      where: { id: offer.id },
+      update: {
+        companyId: offer.companyId,
+        warehouseId: offer.warehouseId,
+        productId: offer.productId,
+        priceMinor: offer.priceMinor,
+        quality: offer.quality,
+        active: offer.active
+      },
+      create: {
+        id: offer.id,
+        companyId: offer.companyId,
+        warehouseId: offer.warehouseId,
+        productId: offer.productId,
+        priceMinor: offer.priceMinor,
+        quality: offer.quality,
+        active: offer.active
+      }
+    });
+  }
+
+  for (const purchase of state.resourcePurchases) {
+    await prisma.resourcePurchase?.upsert?.({
+      where: { id: purchase.id },
+      update: {
+        tick: purchase.tick,
+        playerId: purchase.playerId,
+        buyerCompanyId: purchase.buyerCompanyId,
+        sellerCompanyId: purchase.sellerCompanyId,
+        sellerWarehouseId: purchase.sellerWarehouseId,
+        buyerWarehouseId: purchase.buyerWarehouseId,
+        productId: purchase.productId,
+        quantity: purchase.quantity,
+        unitPriceMinor: BigInt(purchase.unitPriceMinor),
+        totalPriceMinor: BigInt(purchase.totalPriceMinor),
+        quality: purchase.quality,
+        status: purchase.status
+      },
+      create: {
+        id: purchase.id,
+        tick: purchase.tick,
+        playerId: purchase.playerId,
+        buyerCompanyId: purchase.buyerCompanyId,
+        sellerCompanyId: purchase.sellerCompanyId,
+        sellerWarehouseId: purchase.sellerWarehouseId,
+        buyerWarehouseId: purchase.buyerWarehouseId,
+        productId: purchase.productId,
+        quantity: purchase.quantity,
+        unitPriceMinor: BigInt(purchase.unitPriceMinor),
+        totalPriceMinor: BigInt(purchase.totalPriceMinor),
+        quality: purchase.quality,
+        status: purchase.status
+      }
+    });
+  }
+
+  for (const run of state.manualProductionRuns) {
+    await prisma.manualProductionRun?.upsert?.({
+      where: { id: run.id },
+      update: {
+        tick: run.tick,
+        playerId: run.playerId,
+        companyId: run.companyId,
+        productionPlanId: run.productionPlanId,
+        warehouseId: run.warehouseId,
+        outputProductId: run.outputProductId,
+        requestedQuantity: run.requestedQuantity,
+        producedQuantity: run.producedQuantity,
+        inputConsumptions: run.inputConsumptions,
+        status: run.status
+      },
+      create: {
+        id: run.id,
+        tick: run.tick,
+        playerId: run.playerId,
+        companyId: run.companyId,
+        productionPlanId: run.productionPlanId,
+        warehouseId: run.warehouseId,
+        outputProductId: run.outputProductId,
+        requestedQuantity: run.requestedQuantity,
+        producedQuantity: run.producedQuantity,
+        inputConsumptions: run.inputConsumptions,
+        status: run.status
+      }
+    });
+  }
+
+  for (const change of state.retailPriceChanges) {
+    await prisma.retailPriceChange?.upsert?.({
+      where: { id: change.id },
+      update: {
+        tick: change.tick,
+        playerId: change.playerId,
+        companyId: change.companyId,
+        retailOfferId: change.retailOfferId,
+        productId: change.productId,
+        oldPriceMinor: BigInt(change.oldPriceMinor),
+        newPriceMinor: BigInt(change.newPriceMinor),
+        currencyCode: change.currencyCode,
+        status: change.status
+      },
+      create: {
+        id: change.id,
+        tick: change.tick,
+        playerId: change.playerId,
+        companyId: change.companyId,
+        retailOfferId: change.retailOfferId,
+        productId: change.productId,
+        oldPriceMinor: BigInt(change.oldPriceMinor),
+        newPriceMinor: BigInt(change.newPriceMinor),
+        currencyCode: change.currencyCode,
+        status: change.status
+      }
+    });
+  }
+
+  for (const event of state.events.slice(-100)) {
+    await prisma.event?.upsert?.({
+      where: { id: event.id },
+      update: {
+        tick: event.tick,
+        type: event.type,
+        message: event.message,
+        entityIds: event.entityIds,
+        metadata: event.metadata
+      },
+      create: {
+        id: event.id,
+        tick: event.tick,
+        type: event.type,
+        message: event.message,
+        entityIds: event.entityIds,
+        metadata: event.metadata
+      }
+    });
+  }
+
+  for (const metric of state.metrics.slice(-100)) {
+    await prisma.metric?.upsert?.({
+      where: { id: metric.id },
+      update: {
+        tick: metric.tick,
+        name: metric.name,
+        value: metric.value,
+        tags: metric.tags
+      },
+      create: {
+        id: metric.id,
+        tick: metric.tick,
+        name: metric.name,
+        value: metric.value,
+        tags: metric.tags
+      }
+    });
   }
 }
 

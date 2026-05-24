@@ -180,4 +180,3 @@ export declare function fundLobbying(state: WorldState, input: LobbyingInput, se
 export declare function runMediaCampaign(state: WorldState, input: MediaCampaignInput, seed?: string): MediaCampaignResult;
 export declare function castVote(state: WorldState, input: VoteInput, seed?: string): VoteResult;
 export declare function assertNoInvalidEconomyValues(state: WorldState): void;
-//# sourceMappingURL=index.d.ts.map

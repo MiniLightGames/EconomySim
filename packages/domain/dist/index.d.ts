@@ -1049,7 +1049,7 @@ export interface FinancialEntry {
 export interface FinancialTransaction {
     readonly id: EntityId;
     readonly tick: number;
-    readonly type: "RetailSaleTransaction" | "LoanOriginationTransaction" | "LoanPaymentTransaction" | "InterestAccrualTransaction" | "TradeSettlementTransaction" | "BankruptcyRecoveryTransaction" | "CentralBankBondPurchaseTransaction" | "DepositLossTransaction" | "TaxCollectionTransaction" | "GovernmentSpendingTransaction" | "SubsidyPaymentTransaction" | "GovernmentBondIssuanceTransaction" | "NationalizationTransaction" | "LobbyingPaymentTransaction" | "MediaCampaignTransaction" | "ResearchInvestmentTransaction" | "CleanEnergySubsidyTransaction" | "ResourcePurchaseTransaction" | "IllegalTradeTransaction" | "FinePaymentTransaction" | "ConfiscationTransaction" | "CorruptionPaymentTransaction";
+    readonly type: "RetailSaleTransaction" | "LoanOriginationTransaction" | "LoanPaymentTransaction" | "InterestAccrualTransaction" | "TradeSettlementTransaction" | "BankruptcyRecoveryTransaction" | "CentralBankBondPurchaseTransaction" | "DepositLossTransaction" | "TaxCollectionTransaction" | "GovernmentSpendingTransaction" | "SubsidyPaymentTransaction" | "GovernmentBondIssuanceTransaction" | "NationalizationTransaction" | "LobbyingPaymentTransaction" | "MediaCampaignTransaction" | "ResearchInvestmentTransaction" | "CleanEnergySubsidyTransaction" | "ResourcePurchaseTransaction" | "LandPremiseTransaction" | "IllegalTradeTransaction" | "FinePaymentTransaction" | "ConfiscationTransaction" | "CorruptionPaymentTransaction";
     readonly entries: readonly FinancialEntry[];
 }
 export interface NewsItem {
@@ -1314,8 +1314,28 @@ export interface BuyLandCommand {
     readonly type: "BuyLandCommand";
     readonly commandId: EntityId;
     readonly playerId: EntityId;
+    readonly companyId: EntityId;
     readonly cityId: EntityId;
     readonly lotId: EntityId;
+    readonly mode?: "purchase" | "lease";
+}
+export interface BuyResourceCommand {
+    readonly type: "BuyResourceCommand";
+    readonly commandId: EntityId;
+    readonly playerId: EntityId;
+    readonly buyerCompanyId: EntityId;
+    readonly resourceOfferId: EntityId;
+    readonly quantity: number;
+    readonly maxUnitPriceMinor: number;
+    readonly buyerWarehouseId?: EntityId;
+}
+export interface RunManualProductionCommand {
+    readonly type: "RunManualProductionCommand";
+    readonly commandId: EntityId;
+    readonly playerId: EntityId;
+    readonly companyId: EntityId;
+    readonly productionPlanId: EntityId;
+    readonly requestedQuantity: number;
 }
 export interface SetRetailPriceCommand {
     readonly type: "SetRetailPriceCommand";
@@ -1326,8 +1346,8 @@ export interface SetRetailPriceCommand {
     readonly priceMinor: number;
     readonly currencyCode: CurrencyCode;
 }
-export type PlayerCommand = CreateCompanyCommand | BuyLandCommand | SetRetailPriceCommand;
-export declare const ECONOMY_INVARIANTS: readonly ["Money changes only through balanced ledger transactions.", "Player intent enters the world as backend-validated commands.", "Inventory moves only by warehouse to cargo batch to warehouse.", "Loans and market orders are validated by simulation-core before balances change.", "Ordinary retail goods clear through retail markets, not exchange order books.", "Players influence governments through votes, funding, lobbying, and media rather than becoming politicians.", "Wars are automated state conflicts; players participate through economic supply, finance, and logistics only.", "Strategic cells keep factual and legal territorial control separate.", "R&D changes technology levels through validated research projects, patents, or license agreements.", "Resource deposits, pollution, and environmental health are tick-updated simulation state.", "Taxes, subsidies, nationalization, and bailouts must be represented as auditable financial transactions.", "Black market trades are backend-validated risky commands, never direct player balance or inventory edits.", "B2B resource purchases move inventory through warehouse records and settle money through balanced ledger transactions.", "Player retail prices change only through backend-validated retail offer commands.", "Fines, confiscations, bribes, and illegal proceeds are auditable financial transactions and enforcement events.", "Important world changes must produce explainable causes, impacts, metrics, and news.", "Private company finances stay hidden unless the company is publicly listed.", "Public statistics carry reliability and manipulation-risk metadata.", "Important actions create audit log records, events, and metrics."];
+export type PlayerCommand = CreateCompanyCommand | BuyLandCommand | BuyResourceCommand | RunManualProductionCommand | SetRetailPriceCommand;
+export declare const ECONOMY_INVARIANTS: readonly ["Money changes only through balanced ledger transactions.", "Player intent enters the world as backend-validated commands applied on simulation ticks.", "Inventory moves only by warehouse to cargo batch to warehouse.", "Loans and market orders are validated by simulation-core before balances change.", "Ordinary retail goods clear through retail markets, not exchange order books.", "Players influence governments through votes, funding, lobbying, and media rather than becoming politicians.", "Wars are automated state conflicts; players participate through economic supply, finance, and logistics only.", "Strategic cells keep factual and legal territorial control separate.", "R&D changes technology levels through validated research projects, patents, or license agreements.", "Resource deposits, pollution, and environmental health are tick-updated simulation state.", "Taxes, subsidies, nationalization, and bailouts must be represented as auditable financial transactions.", "Black market trades are backend-validated risky commands, never direct player balance or inventory edits.", "B2B resource purchases move inventory through warehouse records and settle money through balanced ledger transactions on tick commands.", "Player land, resource, production, and retail operations change state only through backend-bound tick commands.", "Fines, confiscations, bribes, and illegal proceeds are auditable financial transactions and enforcement events.", "Important world changes must produce explainable causes, impacts, metrics, and news.", "Private company finances stay hidden unless the company is publicly listed.", "Public statistics carry reliability and manipulation-risk metadata.", "Important actions create audit log records, events, and metrics."];
 export declare function createInitialWorldState(seed?: string): WorldState;
 export declare function summarizeWorld(state: WorldState): {
     currentTick: number;
@@ -1397,4 +1417,3 @@ export declare function summarizeWorld(state: WorldState): {
     news: number;
     populationTotal: number;
 };
-//# sourceMappingURL=index.d.ts.map

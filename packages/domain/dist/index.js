@@ -5,7 +5,7 @@ exports.createInitialWorldState = createInitialWorldState;
 exports.summarizeWorld = summarizeWorld;
 exports.ECONOMY_INVARIANTS = [
     "Money changes only through balanced ledger transactions.",
-    "Player intent enters the world as backend-validated commands.",
+    "Player intent enters the world as backend-validated commands applied on simulation ticks.",
     "Inventory moves only by warehouse to cargo batch to warehouse.",
     "Loans and market orders are validated by simulation-core before balances change.",
     "Ordinary retail goods clear through retail markets, not exchange order books.",
@@ -16,8 +16,8 @@ exports.ECONOMY_INVARIANTS = [
     "Resource deposits, pollution, and environmental health are tick-updated simulation state.",
     "Taxes, subsidies, nationalization, and bailouts must be represented as auditable financial transactions.",
     "Black market trades are backend-validated risky commands, never direct player balance or inventory edits.",
-    "B2B resource purchases move inventory through warehouse records and settle money through balanced ledger transactions.",
-    "Player retail prices change only through backend-validated retail offer commands.",
+    "B2B resource purchases move inventory through warehouse records and settle money through balanced ledger transactions on tick commands.",
+    "Player land, resource, production, and retail operations change state only through backend-bound tick commands.",
     "Fines, confiscations, bribes, and illegal proceeds are auditable financial transactions and enforcement events.",
     "Important world changes must produce explainable causes, impacts, metrics, and news.",
     "Private company finances stay hidden unless the company is publicly listed.",
@@ -1970,4 +1970,3 @@ function summarizeWorld(state) {
         populationTotal: state.cities.reduce((total, city) => total + city.populationTotal, 0)
     };
 }
-//# sourceMappingURL=index.js.map

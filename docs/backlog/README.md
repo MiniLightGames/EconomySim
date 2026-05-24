@@ -45,3 +45,8 @@ ADR-XXXX-short-name.md
 - `P2-TASK-20260523-0023-ux-ui-polish.md`
 - `P1-TASK-20260523-0024-player-resource-production-vertical.md`
 - `P1-TASK-20260524-0025-retail-price-sales-vertical.md`
+- `P1-TASK-20260524-0026-command-tick-auth-persistence-vertical.md`
+- `P1-TASK-20260524-0027-normalized-prisma-hydration.md`
+- `P1-TASK-20260524-0028-real-auth-rbac-session.md`
+- `P1-TASK-20260524-0029-command-batch-dependencies.md`
+- `P1-TASK-20260524-0030-browser-e2e-command-player-loop.md`

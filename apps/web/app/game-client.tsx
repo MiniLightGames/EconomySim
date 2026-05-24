@@ -69,6 +69,7 @@ import {
   fetchGameData,
   formatApiError,
   fundLobbying,
+  purchaseLand,
   purchaseResource,
   runMediaCampaign,
   runNextTick,
@@ -137,6 +138,7 @@ export function GameClient() {
   const [isVoting, setIsVoting] = useState(false);
   const [isStartingResearch, setIsStartingResearch] = useState(false);
   const [isCreatingIllegalTrade, setIsCreatingIllegalTrade] = useState(false);
+  const [isPurchasingLand, setIsPurchasingLand] = useState(false);
   const [isPurchasingResource, setIsPurchasingResource] = useState(false);
   const [isRunningProduction, setIsRunningProduction] = useState(false);
   const [isUpdatingRetailPrice, setIsUpdatingRetailPrice] = useState(false);
@@ -303,18 +305,50 @@ export function GameClient() {
     setNotice(null);
 
     try {
-      await createCompany({
-        playerId: PLAYER_ID,
+      const company = await createCompany({
         countryId: selectedCountryId,
         name: trimmedName
       });
       setCompanyName("");
-      setNotice(`${trimmedName} зарегистрирована через backend validation.`);
+      setSelectedOperationsCompanyId(company.id);
+      setNotice(`${trimmedName} зарегистрирована через command/tick. Теперь купите или арендуйте помещение.`);
       await refreshWorld(false);
     } catch (createError) {
       setError(formatApiError(createError));
     } finally {
       setIsCreatingCompany(false);
+    }
+  }
+
+  async function handlePurchaseLand(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const companyId = selectedOperationsCompanyId ?? data?.world.companies.find((company) => company.ownerType === "player")?.id ?? null;
+    const company = data?.world.companies.find((candidate) => candidate.id === companyId) ?? null;
+    const cityId =
+      data?.world.cities.find((city) => city.countryId === company?.countryId && city.id === selectedCityId)?.id ??
+      data?.world.cities.find((city) => city.countryId === company?.countryId)?.id ??
+      null;
+
+    if (!companyId || !cityId) {
+      setError("Для покупки помещения нужна компания игрока и город в стране регистрации.");
+      return;
+    }
+
+    setIsPurchasingLand(true);
+    setNotice(null);
+
+    try {
+      const result = await purchaseLand({
+        companyId,
+        cityId,
+        mode: "purchase"
+      });
+      setNotice(`Помещение готово: ${result.warehouse?.name ?? "warehouse"}. Можно покупать wheat и производить bread.`);
+      await refreshWorld(false);
+    } catch (landError) {
+      setError(formatApiError(landError));
+    } finally {
+      setIsPurchasingLand(false);
     }
   }
 
@@ -336,7 +370,6 @@ export function GameClient() {
 
     try {
       const purchase = await purchaseResource({
-        playerId: PLAYER_ID,
         buyerCompanyId: companyId,
         resourceOfferId: offer.id,
         quantity,
@@ -368,7 +401,6 @@ export function GameClient() {
 
     try {
       const run = await runProduction({
-        playerId: PLAYER_ID,
         companyId,
         productionPlanId: plan.id,
         requestedQuantity
@@ -407,7 +439,6 @@ export function GameClient() {
 
     try {
       const result = await setRetailPrice({
-        playerId: PLAYER_ID,
         companyId,
         retailOfferId: offer.id,
         priceMinor,
@@ -503,7 +534,6 @@ export function GameClient() {
 
     try {
       await fundLobbying({
-        playerId: PLAYER_ID,
         countryId,
         targetPartyId: selectedPartyId ?? undefined,
         lawType: "deposit_insurance",
@@ -533,7 +563,6 @@ export function GameClient() {
 
     try {
       await runMediaCampaign({
-        playerId: PLAYER_ID,
         countryId,
         targetPartyId: selectedPartyId ?? undefined,
         message: mediaMessage,
@@ -562,7 +591,6 @@ export function GameClient() {
 
     try {
       await castVote({
-        playerId: PLAYER_ID,
         countryId,
         partyId,
         choice: "for"
@@ -769,6 +797,7 @@ export function GameClient() {
           </div>
           <OperationsPanel
             data={data}
+            isPurchasingLand={isPurchasingLand}
             isPurchasingResource={isPurchasingResource}
             isRunningProduction={isRunningProduction}
             isUpdatingRetailPrice={isUpdatingRetailPrice}
@@ -791,6 +820,7 @@ export function GameClient() {
                 setResourceMaxPriceMinor(offer.unitPriceMinor.toString());
               }
             }}
+            onPurchaseLand={handlePurchaseLand}
             onRunProduction={handleRunProduction}
             onSetRetailPrice={handleSetRetailPrice}
             onSubmitPurchase={handlePurchaseResource}
@@ -2690,6 +2720,7 @@ function CreateCompanyPanel({
 
 function OperationsPanel({
   data,
+  isPurchasingLand,
   isPurchasingResource,
   isRunningProduction,
   isUpdatingRetailPrice,
@@ -2697,6 +2728,7 @@ function OperationsPanel({
   onCompanyChange,
   onMaxUnitPriceChange,
   onProductionQuantityChange,
+  onPurchaseLand,
   onRetailPriceChange,
   onResourceOfferChange,
   onResourceQuantityChange,
@@ -2710,6 +2742,7 @@ function OperationsPanel({
   selectedResourceOfferId
 }: {
   readonly data: GameData | null;
+  readonly isPurchasingLand: boolean;
   readonly isPurchasingResource: boolean;
   readonly isRunningProduction: boolean;
   readonly isUpdatingRetailPrice: boolean;
@@ -2717,6 +2750,7 @@ function OperationsPanel({
   readonly onCompanyChange: (companyId: string) => void;
   readonly onMaxUnitPriceChange: (value: string) => void;
   readonly onProductionQuantityChange: (value: string) => void;
+  readonly onPurchaseLand: (event: FormEvent<HTMLFormElement>) => void;
   readonly onRetailPriceChange: (value: string) => void;
   readonly onResourceOfferChange: (offerId: string) => void;
   readonly onResourceQuantityChange: (value: string) => void;
@@ -2732,6 +2766,7 @@ function OperationsPanel({
   const companies = data ? getPlayerCompanies(data.world.companies) : [];
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? companies[0] ?? null;
   const companyWarehouses = data?.warehouses.filter((warehouse) => warehouse.companyId === selectedCompany?.id) ?? [];
+  const companyHasPremise = companyWarehouses.length > 0;
   const companyInventory =
     data?.world.inventoryLots
       .filter((lot) => companyWarehouses.some((warehouse) => warehouse.id === lot.warehouseId) && lot.quantity > 0)
@@ -2779,6 +2814,21 @@ function OperationsPanel({
               </select>
             </label>
 
+            {!companyHasPremise ? (
+              <form className="grid gap-3 rounded-md border border-economy-gold/50 bg-economy-gold/10 p-3" onSubmit={onPurchaseLand}>
+                <SubPanelTitle icon={<WarehouseIcon className="h-4 w-4" aria-hidden="true" />} title="Buy / Lease Premise" />
+                <p className="text-sm text-stone-300">Компания зарегистрирована. Следующий command/tick шаг создаст склад, bread production plan, retail offer и базовую лицензию.</p>
+                <button
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-economy-gold/70 bg-economy-gold px-3 text-sm font-bold text-[#17110a] transition hover:bg-[#efc46c] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isPurchasingLand}
+                  type="submit"
+                >
+                  {isPurchasingLand ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <WarehouseIcon className="h-4 w-4" aria-hidden="true" />}
+                  Купить помещение
+                </button>
+              </form>
+            ) : null}
+
             <div className="grid gap-3 xl:grid-cols-3">
               <form className="grid gap-3 rounded-md border border-[#344239] bg-black/25 p-3" onSubmit={onSubmitPurchase}>
                 <SubPanelTitle icon={<PackageSearch className="h-4 w-4" aria-hidden="true" />} title="Buy Resource" />
@@ -2823,7 +2873,7 @@ function OperationsPanel({
                     </div>
                     <button
                       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-economy-gold/70 bg-economy-gold px-3 text-sm font-bold text-[#17110a] transition hover:bg-[#efc46c] disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isPurchasingResource}
+                      disabled={isPurchasingResource || !companyHasPremise}
                       type="submit"
                     >
                       {isPurchasingResource ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ShoppingBasket className="h-4 w-4" aria-hidden="true" />}
@@ -2855,7 +2905,7 @@ function OperationsPanel({
                     </label>
                     <button
                       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-economy-teal/70 bg-economy-teal px-3 text-sm font-bold text-[#06110f] transition hover:bg-[#6bcbbb] disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isRunningProduction}
+                      disabled={isRunningProduction || !companyHasPremise}
                       type="submit"
                     >
                       {isRunningProduction ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Factory className="h-4 w-4" aria-hidden="true" />}
@@ -2863,7 +2913,7 @@ function OperationsPanel({
                     </button>
                   </>
                 ) : (
-                  <EmptyState>Create a player company to unlock its starter recipe.</EmptyState>
+                  <EmptyState>Купите или арендуйте помещение, чтобы открыть starter recipe.</EmptyState>
                 )}
               </form>
 
@@ -2888,7 +2938,7 @@ function OperationsPanel({
                     </label>
                     <button
                       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-economy-gold/70 bg-economy-gold px-3 text-sm font-bold text-[#17110a] transition hover:bg-[#efc46c] disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isUpdatingRetailPrice}
+                      disabled={isUpdatingRetailPrice || !companyHasPremise}
                       type="submit"
                     >
                       {isUpdatingRetailPrice ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <BadgeDollarSign className="h-4 w-4" aria-hidden="true" />}
@@ -2946,7 +2996,7 @@ function OperationsPanel({
             </div>
           </>
         ) : (
-          <EmptyState>Create a company first. It receives a starter warehouse, bread recipe, and required food license.</EmptyState>
+          <EmptyState>Сначала создайте компанию. После регистрации отдельный command/tick шаг покупает или арендует помещение.</EmptyState>
         )}
       </div>
     </Panel>
