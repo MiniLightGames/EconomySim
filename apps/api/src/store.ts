@@ -357,14 +357,22 @@ async function persistNormalizedWorldState(prisma: PrismaClientLike, state: Worl
         warehouseId: lot.warehouseId,
         productId: lot.productId,
         quantity: lot.quantity,
-        quality: lot.quality
+        quality: lot.quality,
+        unitCostMinor: BigInt(lot.unitCostMinor ?? 0),
+        totalCostMinor: BigInt(lot.totalCostMinor ?? 0),
+        costSourceType: lot.costSourceType ?? "seed",
+        costSourceId: lot.costSourceId ?? null
       },
       create: {
         id: lot.id,
         warehouseId: lot.warehouseId,
         productId: lot.productId,
         quantity: lot.quantity,
-        quality: lot.quality
+        quality: lot.quality,
+        unitCostMinor: BigInt(lot.unitCostMinor ?? 0),
+        totalCostMinor: BigInt(lot.totalCostMinor ?? 0),
+        costSourceType: lot.costSourceType ?? "seed",
+        costSourceId: lot.costSourceId ?? null
       }
     });
   }
@@ -537,6 +545,9 @@ async function persistNormalizedWorldState(prisma: PrismaClientLike, state: Worl
         requestedQuantity: run.requestedQuantity,
         producedQuantity: run.producedQuantity,
         inputConsumptions: run.inputConsumptions,
+        inputCostMinor: BigInt(run.inputCostMinor ?? 0),
+        outputUnitCostMinor: BigInt(run.outputUnitCostMinor ?? 0),
+        outputTotalCostMinor: BigInt(run.outputTotalCostMinor ?? 0),
         status: run.status
       },
       create: {
@@ -550,6 +561,9 @@ async function persistNormalizedWorldState(prisma: PrismaClientLike, state: Worl
         requestedQuantity: run.requestedQuantity,
         producedQuantity: run.producedQuantity,
         inputConsumptions: run.inputConsumptions,
+        inputCostMinor: BigInt(run.inputCostMinor ?? 0),
+        outputUnitCostMinor: BigInt(run.outputUnitCostMinor ?? 0),
+        outputTotalCostMinor: BigInt(run.outputTotalCostMinor ?? 0),
         status: run.status
       }
     });
@@ -1155,7 +1169,11 @@ function toInventoryLot(row: Record<string, unknown>): InventoryLot {
     warehouseId: stringField(row, "warehouseId"),
     productId: stringField(row, "productId"),
     quantity: numberField(row, "quantity"),
-    quality: numberField(row, "quality")
+    quality: numberField(row, "quality"),
+    unitCostMinor: nullableNumber(row, "unitCostMinor") ?? 0,
+    totalCostMinor: nullableNumber(row, "totalCostMinor") ?? 0,
+    costSourceType: (nullableString(row, "costSourceType") ?? "seed") as InventoryLot["costSourceType"],
+    costSourceId: nullableString(row, "costSourceId")
   };
 }
 
@@ -1251,6 +1269,9 @@ function toManualProductionRun(row: Record<string, unknown>): ManualProductionRu
     requestedQuantity: numberField(row, "requestedQuantity"),
     producedQuantity: numberField(row, "producedQuantity"),
     inputConsumptions: jsonArray(row, "inputConsumptions") as ManualProductionRun["inputConsumptions"],
+    inputCostMinor: nullableNumber(row, "inputCostMinor") ?? 0,
+    outputUnitCostMinor: nullableNumber(row, "outputUnitCostMinor") ?? 0,
+    outputTotalCostMinor: nullableNumber(row, "outputTotalCostMinor") ?? 0,
     status: stringField(row, "status") as ManualProductionRun["status"]
   };
 }

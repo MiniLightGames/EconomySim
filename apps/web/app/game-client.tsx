@@ -2818,6 +2818,27 @@ function OperationsPanel({
       .flatMap((transaction) => transaction.entries)
       .filter((entry) => entry.ownerType === "company" && entry.ownerId === selectedCompany?.id && entry.amountMinor > 0)
       .reduce((total, entry) => total + entry.amountMinor, 0) ?? 0;
+  const retailCogsMinor = retailSales.reduce((total, event) => total + eventMetadataNumber(event, "costOfGoodsSoldMinor"), 0);
+  const retailGrossMarginMinor = retailSales.reduce((total, event) => total + eventMetadataNumber(event, "grossMarginMinor"), 0);
+  const grossMarginRate = retailRevenueMinor > 0 ? retailGrossMarginMinor / retailRevenueMinor : 0;
+  const resourceSpendMinor =
+    data?.resourcePurchases
+      .filter((purchase) => purchase.buyerCompanyId === selectedCompany?.id)
+      .reduce((total, purchase) => total + purchase.totalPriceMinor, 0) ?? 0;
+  const productionInputCostMinor =
+    data?.productionRuns
+      .filter((run) => run.companyId === selectedCompany?.id)
+      .reduce((total, run) => total + (run.inputCostMinor ?? run.outputTotalCostMinor ?? 0), 0) ?? 0;
+  const inventoryCostMinor = companyInventory.reduce((total, lot) => total + (lot.totalCostMinor ?? 0), 0);
+  const companyCashDeltaMinor =
+    data?.world.financialTransactions
+      .flatMap((transaction) => transaction.entries)
+      .filter((entry) => entry.ownerType === "company" && entry.ownerId === selectedCompany?.id)
+      .reduce((total, entry) => total + entry.amountMinor, 0) ?? 0;
+  const marginExplanation =
+    data?.world.explanations
+      .filter((explanation) => explanation.targetType === "profitability" && explanation.targetId === selectedCompany?.id)
+      .sort((left, right) => right.tick - left.tick)[0] ?? null;
   const selectedOffer = data?.resourceOffers.find((offer) => offer.id === selectedResourceOfferId) ?? data?.resourceOffers[0] ?? null;
   const inboundShipments =
     data?.shipments.filter(
@@ -3017,7 +3038,9 @@ function OperationsPanel({
                     </button>
                     <div className="grid grid-cols-2 gap-2">
                       <MiniStat label="Revenue" value={formatMoneyMinor(retailRevenueMinor, playerRetailOffer.currencyCode)} />
-                      <MiniStat label="Sales ticks" value={retailSales.length.toString()} tone={retailSales.length > 0 ? "success" : "warning"} />
+                      <MiniStat label="Gross margin" value={formatSignedMoneyMinor(retailGrossMarginMinor, playerRetailOffer.currencyCode)} tone={retailGrossMarginMinor < 0 ? "danger" : retailGrossMarginMinor > 0 ? "success" : "neutral"} />
+                      <MiniStat label="COGS" value={formatMoneyMinor(retailCogsMinor, playerRetailOffer.currencyCode)} />
+                      <MiniStat label="Margin rate" value={formatPercent(grossMarginRate)} tone={grossMarginRate < 0 ? "danger" : grossMarginRate > 0.15 ? "success" : "warning"} />
                     </div>
                   </>
                 ) : (
@@ -3026,7 +3049,7 @@ function OperationsPanel({
               </form>
             </div>
 
-            <div className="grid gap-2 lg:grid-cols-2">
+            <div className="grid gap-2 lg:grid-cols-3">
               <div className="rounded-md border border-[#344239] bg-black/20 p-3">
                 <SubPanelTitle icon={<WarehouseIcon className="h-4 w-4" aria-hidden="true" />} title="Inventory" />
                 {companyInventory.length > 0 ? (
@@ -3037,13 +3060,37 @@ function OperationsPanel({
                       return (
                         <div className="flex items-center justify-between gap-2 text-xs text-stone-300" key={lot.id}>
                           <span>{product?.name ?? lot.productId}</span>
-                          <span className="font-bold text-economy-teal">{formatCompactNumber(lot.quantity)}</span>
+                          <span className="text-right font-bold text-economy-teal">
+                            {formatCompactNumber(lot.quantity)}
+                            <span className="block text-[10px] font-normal text-stone-500">{formatMoneyMinor(lot.unitCostMinor ?? 0)} / unit</span>
+                          </span>
                         </div>
                       );
                     })}
                   </div>
                 ) : (
                   <EmptyState>Warehouse is empty.</EmptyState>
+                )}
+              </div>
+
+              <div className="rounded-md border border-[#344239] bg-black/20 p-3">
+                <SubPanelTitle icon={<BadgeDollarSign className="h-4 w-4" aria-hidden="true" />} title="P&L / Margin" />
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <MiniStat label="Revenue" value={formatMoneyMinor(retailRevenueMinor, selectedCompany?.currencyCode ?? "ECO")} />
+                  <MiniStat label="COGS" value={formatMoneyMinor(retailCogsMinor, selectedCompany?.currencyCode ?? "ECO")} />
+                  <MiniStat label="Gross margin" value={formatSignedMoneyMinor(retailGrossMarginMinor, selectedCompany?.currencyCode ?? "ECO")} tone={retailGrossMarginMinor < 0 ? "danger" : retailGrossMarginMinor > 0 ? "success" : "neutral"} />
+                  <MiniStat label="Cash delta" value={formatSignedMoneyMinor(companyCashDeltaMinor, selectedCompany?.currencyCode ?? "ECO")} tone={companyCashDeltaMinor < 0 ? "danger" : companyCashDeltaMinor > 0 ? "success" : "neutral"} />
+                  <MiniStat label="Input cost" value={formatMoneyMinor(productionInputCostMinor, selectedCompany?.currencyCode ?? "ECO")} />
+                  <MiniStat label="Inventory cost" value={formatMoneyMinor(inventoryCostMinor, selectedCompany?.currencyCode ?? "ECO")} />
+                  <MiniStat label="Resource spend" value={formatMoneyMinor(resourceSpendMinor, selectedCompany?.currencyCode ?? "ECO")} />
+                  <MiniStat label="Margin rate" value={formatPercent(grossMarginRate)} tone={grossMarginRate < 0 ? "danger" : grossMarginRate > 0.15 ? "success" : "warning"} />
+                </div>
+                {marginExplanation ? (
+                  <p className="mt-2 rounded-md border border-economy-teal/30 bg-economy-teal/10 p-2 text-xs text-stone-300">
+                    {marginExplanation.summary}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-stone-500">Gross margin appears after population buys produced retail stock on a tick.</p>
                 )}
               </div>
 
@@ -3056,7 +3103,11 @@ function OperationsPanel({
                         Purchase: {formatCompactNumber(lastPurchase.quantity)} units for {formatMoneyMinor(lastPurchase.totalPriceMinor)} ({lastPurchase.deliveryMode}, {lastPurchase.status}).
                       </p>
                     ) : null}
-                    {lastRun ? <p>Production: {formatCompactNumber(lastRun.producedQuantity)} units completed.</p> : null}
+                    {lastRun ? (
+                      <p>
+                        Production: {formatCompactNumber(lastRun.producedQuantity)} units completed at {formatMoneyMinor(lastRun.outputUnitCostMinor ?? 0)} / unit.
+                      </p>
+                    ) : null}
                     {lastPriceChange ? (
                       <p>
                         Price: {formatMoneyMinor(lastPriceChange.oldPriceMinor, lastPriceChange.currencyCode)} to{" "}
@@ -3355,13 +3406,14 @@ function MiniStat({
   value
 }: {
   readonly label: string;
-  readonly tone?: "success" | "warning" | "danger";
+  readonly tone?: "success" | "warning" | "danger" | "neutral";
   readonly value: string;
 }) {
   const toneClass = {
     success: "text-economy-teal",
     warning: "text-economy-gold",
-    danger: "text-rose-300"
+    danger: "text-rose-300",
+    neutral: "text-stone-300"
   }[tone];
 
   return (
@@ -3601,6 +3653,11 @@ function formatSignedMoneyMinor(value: number, currencyCode = "ECO"): string {
   }
 
   return formatted;
+}
+
+function eventMetadataNumber(event: GameData["world"]["events"][number], key: string): number {
+  const value = event.metadata[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function getCompanyStatusTone(company: ReturnType<typeof getPlayerCompanies>[number]): "danger" | "success" | "warning" {

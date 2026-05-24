@@ -213,6 +213,11 @@ describe("runTick", () => {
 
     expect(purchased.acceptedCommands).toContain("cmd-buy-wheat");
     expect(purchased.state.financialTransactions.some((transaction) => transaction.type === "ResourcePurchaseTransaction")).toBe(true);
+    const purchasedWheatLot = purchased.state.inventoryLots.find(
+      (lot) => lot.warehouseId === warehouseId && lot.productId === "ops-command-vertical-product-wheat"
+    );
+    expect(purchasedWheatLot?.unitCostMinor).toBeGreaterThan(0);
+    expect(purchasedWheatLot?.totalCostMinor).toBeGreaterThan(0);
 
     state = purchased.state;
     const produced = runTick({
@@ -232,6 +237,13 @@ describe("runTick", () => {
 
     expect(produced.acceptedCommands).toContain("cmd-produce-bread");
     expect(produced.events.some((event) => event.type === "ManualProductionRunEvent")).toBe(true);
+    const productionRun = produced.state.manualProductionRuns.find((run) => run.id.includes("cmd-produce-bread"));
+    const producedBreadLot = produced.state.inventoryLots.find(
+      (lot) => lot.warehouseId === warehouseId && lot.productId === "ops-command-vertical-product-bread"
+    );
+    expect(productionRun?.inputCostMinor).toBeGreaterThan(0);
+    expect(productionRun?.outputUnitCostMinor).toBeGreaterThan(0);
+    expect(producedBreadLot?.unitCostMinor).toBe(productionRun?.outputUnitCostMinor);
 
     state = produced.state;
     const priced = runTick({
@@ -257,6 +269,10 @@ describe("runTick", () => {
     const playerSales = settled.state.events.filter((event) => event.type === "ProductSoldEvent" && event.entityIds.includes(companyId as string));
 
     expect(playerSales.length).toBeGreaterThan(0);
+    expect(playerSales.some((event) => Number(event.metadata.costOfGoodsSoldMinor) > 0)).toBe(true);
+    expect(playerSales.some((event) => Number.isFinite(Number(event.metadata.grossMarginMinor)))).toBe(true);
+    expect(settled.state.metrics.some((metric) => metric.name === "market.sales.gross_margin_minor" && metric.tags.companyId === companyId)).toBe(true);
+    expect(settled.state.explanations.some((explanation) => explanation.targetType === "profitability" && explanation.targetId === companyId)).toBe(true);
     expect(settled.state.news.some((news) => news.relatedEntityIds.includes(companyId as string))).toBe(true);
     expect(() => assertNoInvalidEconomyValues(settled.state)).not.toThrow();
   });

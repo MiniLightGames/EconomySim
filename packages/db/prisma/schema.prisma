@@ -1334,18 +1334,23 @@ model Warehouse {
 }
 
 model InventoryLot {
-  id          String    @id @default(cuid())
-  warehouseId String
-  productId   String
-  quantity    Int
-  quality     Float
-  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
-  product     Product   @relation(fields: [productId], references: [id])
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  warehouseId    String
+  productId      String
+  quantity       Int
+  quality        Float
+  unitCostMinor  BigInt    @default(0)
+  totalCostMinor BigInt    @default(0)
+  costSourceType String    @default("seed")
+  costSourceId   String?
+  warehouse      Warehouse @relation(fields: [warehouseId], references: [id])
+  product        Product   @relation(fields: [productId], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([warehouseId])
   @@index([productId])
+  @@index([costSourceType, costSourceId])
 }
 
 model Shipment {
@@ -1610,18 +1615,21 @@ model ResourcePurchase {
 }
 
 model ManualProductionRun {
-  id                 String   @id
-  tick               Int
-  playerId           String
-  companyId          String
-  productionPlanId   String
-  warehouseId        String
-  outputProductId    String
-  requestedQuantity  Int
-  producedQuantity   Int
-  inputConsumptions  Json
-  status             String
-  createdAt          DateTime @default(now())
+  id                  String   @id
+  tick                Int
+  playerId            String
+  companyId           String
+  productionPlanId    String
+  warehouseId         String
+  outputProductId     String
+  requestedQuantity   Int
+  producedQuantity    Int
+  inputConsumptions   Json
+  inputCostMinor      BigInt   @default(0)
+  outputUnitCostMinor BigInt   @default(0)
+  outputTotalCostMinor BigInt  @default(0)
+  status              String
+  createdAt           DateTime @default(now())
 
   @@index([tick])
   @@index([playerId])

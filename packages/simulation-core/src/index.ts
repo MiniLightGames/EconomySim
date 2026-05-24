@@ -1152,7 +1152,11 @@ export function buyResource(state: WorldState, input: BuyResourceInput, seed = "
     productId: product.id,
     quantity,
     quality: offer.quality,
-    lotId: `${seed}-lot-${loadedState.currentTick}-${input.buyerCompanyId}-${product.id}-resource`
+    lotId: `${seed}-lot-${loadedState.currentTick}-${input.buyerCompanyId}-${product.id}-resource`,
+    unitCostMinor: quantity > 0 ? sanitizeMoney(totalPriceMinor / quantity) : 0,
+    totalCostMinor: totalPriceMinor,
+    costSourceType: "resource_purchase",
+    costSourceId: `${seed}-resource-purchase-${loadedState.currentTick}-${loadedState.resourcePurchases.length + 1}`
   });
 
   buyerAccount.balanceMinor = sanitizeMoney(buyerAccount.balanceMinor - totalPriceMinor);
@@ -1323,17 +1327,25 @@ export function runManualProduction(
   }
 
   const inputConsumptions: ProductionRunInputConsumption[] = [];
+  let inputCostMinor = 0;
 
   for (const productionInput of plan.inputs) {
     const adjustedQuantityPerOutput = getAdjustedInputQuantityPerOutput(productionInput.quantityPerOutput, inputEfficiency);
     const requestedInputQuantity = Math.ceil(producedQuantity * adjustedQuantityPerOutput);
-    const consumedQuantity = consumeInventory(inventoryLots, plan.warehouseId, productionInput.productId, requestedInputQuantity);
+    const consumed = consumeInventoryWithCost(inventoryLots, plan.warehouseId, productionInput.productId, requestedInputQuantity);
+    const unitCostMinor = consumed.quantity > 0 ? sanitizeMoney(consumed.totalCostMinor / consumed.quantity) : 0;
+    inputCostMinor += consumed.totalCostMinor;
 
     inputConsumptions.push({
       productId: productionInput.productId,
-      quantity: consumedQuantity
+      quantity: consumed.quantity,
+      unitCostMinor,
+      totalCostMinor: consumed.totalCostMinor
     });
   }
+
+  const outputTotalCostMinor = sanitizeMoney(inputCostMinor);
+  const outputUnitCostMinor = producedQuantity > 0 ? sanitizeMoney(outputTotalCostMinor / producedQuantity) : 0;
 
   addInventory({
     inventoryLots,
@@ -1341,7 +1353,11 @@ export function runManualProduction(
     productId: plan.outputProductId,
     quantity: producedQuantity,
     quality: outputProduct.baseQuality,
-    lotId: `${seed}-lot-${loadedState.currentTick}-${plan.id}-manual-output`
+    lotId: `${seed}-lot-${loadedState.currentTick}-${plan.id}-manual-output`,
+    unitCostMinor: outputUnitCostMinor,
+    totalCostMinor: outputTotalCostMinor,
+    costSourceType: "production",
+    costSourceId: `${seed}-production-run-${loadedState.currentTick}-${loadedState.manualProductionRuns.length + 1}`
   });
 
   const productionRun: ManualProductionRun = {
@@ -1355,6 +1371,9 @@ export function runManualProduction(
     requestedQuantity,
     producedQuantity,
     inputConsumptions,
+    inputCostMinor: outputTotalCostMinor,
+    outputUnitCostMinor,
+    outputTotalCostMinor,
     status: "completed"
   };
   const event: DomainEvent = {
@@ -1368,7 +1387,10 @@ export function runManualProduction(
       companyId: company.id,
       productId: outputProduct.id,
       requestedQuantity,
-      producedQuantity
+      producedQuantity,
+      inputCostMinor: outputTotalCostMinor,
+      outputUnitCostMinor,
+      outputTotalCostMinor
     }
   };
   const metric: Metric = {
@@ -3508,7 +3530,11 @@ function applyBuyResourceCommand(
       productId: product.id,
       quantity,
       quality: offer.quality,
-      lotId: `${input.seed}-lot-${input.tick}-${command.commandId}-${product.id}-resource`
+      lotId: `${input.seed}-lot-${input.tick}-${command.commandId}-${product.id}-resource`,
+      unitCostMinor: quantity > 0 ? sanitizeMoney(totalPriceMinor / quantity) : 0,
+      totalCostMinor: totalPriceMinor,
+      costSourceType: "resource_purchase",
+      costSourceId: `${input.seed}-resource-purchase-${input.tick}-${command.commandId}`
     });
   } else if (quote) {
     shipment = {
@@ -3625,6 +3651,7 @@ function applyBuyResourceCommand(
       goodsCostMinor,
       logisticsCostMinor,
       totalPriceMinor,
+      unitCostMinor: quantity > 0 ? sanitizeMoney(totalPriceMinor / quantity) : 0,
       status: purchase.status
     }
   });
@@ -3753,17 +3780,25 @@ function applyRunManualProductionCommand(
   }
 
   const inputConsumptions: ProductionRunInputConsumption[] = [];
+  let inputCostMinor = 0;
 
   for (const productionInput of plan.inputs) {
     const adjustedQuantityPerOutput = getAdjustedInputQuantityPerOutput(productionInput.quantityPerOutput, inputEfficiency);
     const requestedInputQuantity = Math.ceil(producedQuantity * adjustedQuantityPerOutput);
-    const consumedQuantity = consumeInventory(input.inventoryLots, plan.warehouseId, productionInput.productId, requestedInputQuantity);
+    const consumed = consumeInventoryWithCost(input.inventoryLots, plan.warehouseId, productionInput.productId, requestedInputQuantity);
+    const unitCostMinor = consumed.quantity > 0 ? sanitizeMoney(consumed.totalCostMinor / consumed.quantity) : 0;
+    inputCostMinor += consumed.totalCostMinor;
 
     inputConsumptions.push({
       productId: productionInput.productId,
-      quantity: consumedQuantity
+      quantity: consumed.quantity,
+      unitCostMinor,
+      totalCostMinor: consumed.totalCostMinor
     });
   }
+
+  const outputTotalCostMinor = sanitizeMoney(inputCostMinor);
+  const outputUnitCostMinor = producedQuantity > 0 ? sanitizeMoney(outputTotalCostMinor / producedQuantity) : 0;
 
   addInventory({
     inventoryLots: input.inventoryLots,
@@ -3771,7 +3806,11 @@ function applyRunManualProductionCommand(
     productId: plan.outputProductId,
     quantity: producedQuantity,
     quality: outputProduct.baseQuality,
-    lotId: `${input.seed}-lot-${input.tick}-${command.commandId}-manual-output`
+    lotId: `${input.seed}-lot-${input.tick}-${command.commandId}-manual-output`,
+    unitCostMinor: outputUnitCostMinor,
+    totalCostMinor: outputTotalCostMinor,
+    costSourceType: "production",
+    costSourceId: `${input.seed}-production-run-${input.tick}-${command.commandId}`
   });
 
   const productionRun: ManualProductionRun = {
@@ -3785,6 +3824,9 @@ function applyRunManualProductionCommand(
     requestedQuantity,
     producedQuantity,
     inputConsumptions,
+    inputCostMinor: outputTotalCostMinor,
+    outputUnitCostMinor,
+    outputTotalCostMinor,
     status: "completed"
   };
 
@@ -3800,27 +3842,54 @@ function applyRunManualProductionCommand(
       companyId: company.id,
       productId: outputProduct.id,
       requestedQuantity,
-      producedQuantity
+      producedQuantity,
+      inputCostMinor: outputTotalCostMinor,
+      outputUnitCostMinor,
+      outputTotalCostMinor
     }
   });
-  input.metrics.push({
-    id: `${input.seed}-metric-${input.tick}-${command.commandId}-manual-production`,
-    tick: input.tick,
-    name: "production.manual.output.quantity",
-    value: producedQuantity,
-    tags: {
-      companyId: company.id,
-      productId: outputProduct.id,
-      planId: plan.id
+  input.metrics.push(
+    {
+      id: `${input.seed}-metric-${input.tick}-${command.commandId}-manual-production`,
+      tick: input.tick,
+      name: "production.manual.output.quantity",
+      value: producedQuantity,
+      tags: {
+        companyId: company.id,
+        productId: outputProduct.id,
+        planId: plan.id
+      }
+    },
+    {
+      id: `${input.seed}-metric-${input.tick}-${command.commandId}-manual-production-input-cost`,
+      tick: input.tick,
+      name: "production.manual.input_cost_minor",
+      value: outputTotalCostMinor,
+      tags: {
+        companyId: company.id,
+        productId: outputProduct.id,
+        planId: plan.id
+      }
+    },
+    {
+      id: `${input.seed}-metric-${input.tick}-${command.commandId}-manual-production-unit-cost`,
+      tick: input.tick,
+      name: "production.manual.output_unit_cost_minor",
+      value: outputUnitCostMinor,
+      tags: {
+        companyId: company.id,
+        productId: outputProduct.id,
+        planId: plan.id
+      }
     }
-  });
+  );
   input.news.push({
     id: `${input.seed}-news-${input.tick}-${command.commandId}-manual-production`,
     tick: input.tick,
     category: "corporate",
     templateId: null,
     headline: `${company.name} starts production`,
-    body: `${producedQuantity} units of ${outputProduct.name} were produced through a tick command from player-owned warehouse inventory.`,
+    body: `${producedQuantity} units of ${outputProduct.name} were produced through a tick command from player-owned warehouse inventory at an allocated unit cost of ${outputUnitCostMinor} minor units.`,
     severity: "info",
     relatedEntityIds: [company.id, outputProduct.id, warehouse.id],
     reliabilityId: null
@@ -4289,26 +4358,46 @@ function processProduction(context: ProductionContext): void {
       continue;
     }
 
+    let inputCostMinor = 0;
+
     for (const input of plan.inputs) {
       const adjustedQuantityPerOutput = getAdjustedInputQuantityPerOutput(input.quantityPerOutput, inputEfficiency);
       const requestedQuantity = Math.ceil(outputQuantity * adjustedQuantityPerOutput);
-      const consumedQuantity = consumeInventory(context.inventoryLots, plan.warehouseId, input.productId, requestedQuantity);
+      const consumed = consumeInventoryWithCost(context.inventoryLots, plan.warehouseId, input.productId, requestedQuantity);
+      inputCostMinor += consumed.totalCostMinor;
 
-      if (consumedQuantity > 0) {
-        context.metrics.push({
-          id: `${context.seed}-metric-${context.nextTick}-${plan.id}-${input.productId}-input-consumed`,
-          tick: context.nextTick,
-          name: "production.input.consumed.quantity",
-          value: consumedQuantity,
-          tags: {
-            companyId: company.id,
-            productId: input.productId,
-            outputProductId: product.id,
-            planId: plan.id
+      if (consumed.quantity > 0) {
+        context.metrics.push(
+          {
+            id: `${context.seed}-metric-${context.nextTick}-${plan.id}-${input.productId}-input-consumed`,
+            tick: context.nextTick,
+            name: "production.input.consumed.quantity",
+            value: consumed.quantity,
+            tags: {
+              companyId: company.id,
+              productId: input.productId,
+              outputProductId: product.id,
+              planId: plan.id
+            }
+          },
+          {
+            id: `${context.seed}-metric-${context.nextTick}-${plan.id}-${input.productId}-input-cost`,
+            tick: context.nextTick,
+            name: "production.input.consumed_cost_minor",
+            value: consumed.totalCostMinor,
+            tags: {
+              companyId: company.id,
+              productId: input.productId,
+              outputProductId: product.id,
+              planId: plan.id
+            }
           }
-        });
+        );
       }
     }
+
+    const outputTotalCostMinor = sanitizeMoney(inputCostMinor);
+    const outputUnitCostMinor = outputQuantity > 0 ? sanitizeMoney(outputTotalCostMinor / outputQuantity) : 0;
 
     addInventory({
       inventoryLots: context.inventoryLots,
@@ -4316,7 +4405,11 @@ function processProduction(context: ProductionContext): void {
       productId: plan.outputProductId,
       quantity: outputQuantity,
       quality: product.baseQuality,
-      lotId: `${context.seed}-lot-${context.nextTick}-${plan.id}-output`
+      lotId: `${context.seed}-lot-${context.nextTick}-${plan.id}-output`,
+      unitCostMinor: outputUnitCostMinor,
+      totalCostMinor: outputTotalCostMinor,
+      costSourceType: "production",
+      costSourceId: plan.id
     });
 
     context.events.push({
@@ -4329,7 +4422,10 @@ function processProduction(context: ProductionContext): void {
         companyId: company.id,
         productId: product.id,
         warehouseId: warehouse.id,
-        quantity: outputQuantity
+        quantity: outputQuantity,
+        inputCostMinor: outputTotalCostMinor,
+        outputUnitCostMinor,
+        outputTotalCostMinor
       }
     });
 
@@ -5137,8 +5233,12 @@ function buyForNeed(input: BuyForNeedInput): PurchaseResult {
       continue;
     }
 
-    const actualQuantity = consumeInventory(input.inventoryLots, offer.warehouseId, offer.productId, quantity);
+    const consumed = consumeInventoryWithCost(input.inventoryLots, offer.warehouseId, offer.productId, quantity);
+    const actualQuantity = consumed.quantity;
     const saleAmountMinor = sanitizeMoney(actualQuantity * priceMinor);
+    const costOfGoodsSoldMinor = sanitizeMoney(consumed.totalCostMinor);
+    const grossMarginMinor = sanitizeMoney(saleAmountMinor - costOfGoodsSoldMinor);
+    const grossMarginRate = saleAmountMinor > 0 ? grossMarginMinor / saleAmountMinor : 0;
 
     if (actualQuantity <= 0 || saleAmountMinor <= 0) {
       continue;
@@ -5182,7 +5282,10 @@ function buyForNeed(input: BuyForNeedInput): PurchaseResult {
         companyId: company.id,
         productId: product.id,
         quantity: actualQuantity,
-        revenueMinor: saleAmountMinor
+        revenueMinor: saleAmountMinor,
+        costOfGoodsSoldMinor,
+        grossMarginMinor,
+        grossMarginRate
       }
     });
 
@@ -5204,6 +5307,42 @@ function buyForNeed(input: BuyForNeedInput): PurchaseResult {
         tick: input.nextTick,
         name: "market.sales.revenue_minor",
         value: saleAmountMinor,
+        tags: {
+          cohortId: input.cohort.id,
+          companyId: company.id,
+          productId: product.id,
+          needCategory: input.needCategory
+        }
+      },
+      {
+        id: `${input.seed}-metric-${input.nextTick}-${input.cohort.id}-${offer.id}-sales-cogs`,
+        tick: input.nextTick,
+        name: "market.sales.cogs_minor",
+        value: costOfGoodsSoldMinor,
+        tags: {
+          cohortId: input.cohort.id,
+          companyId: company.id,
+          productId: product.id,
+          needCategory: input.needCategory
+        }
+      },
+      {
+        id: `${input.seed}-metric-${input.nextTick}-${input.cohort.id}-${offer.id}-gross-margin`,
+        tick: input.nextTick,
+        name: "market.sales.gross_margin_minor",
+        value: grossMarginMinor,
+        tags: {
+          cohortId: input.cohort.id,
+          companyId: company.id,
+          productId: product.id,
+          needCategory: input.needCategory
+        }
+      },
+      {
+        id: `${input.seed}-metric-${input.nextTick}-${input.cohort.id}-${offer.id}-gross-margin-rate`,
+        tick: input.nextTick,
+        name: "market.sales.gross_margin_rate",
+        value: grossMarginRate,
         tags: {
           cohortId: input.cohort.id,
           companyId: company.id,
@@ -5292,13 +5431,19 @@ function processLogistics(context: LogisticsContext): void {
       linkedPurchase.status = "delivered";
     }
 
+    const deliveredCostMinor = sanitizeMoney(linkedPurchase?.totalPriceMinor ?? shipment.costMinor);
+
     addInventory({
       inventoryLots: context.inventoryLots,
       warehouseId: shipment.destinationWarehouseId,
       productId: shipment.productId,
       quantity: shipment.quantity,
-      quality: product?.baseQuality ?? 0.5,
-      lotId: `${context.seed}-lot-${context.nextTick}-${shipment.id}-delivered`
+      quality: linkedPurchase?.quality ?? product?.baseQuality ?? 0.5,
+      lotId: `${context.seed}-lot-${context.nextTick}-${shipment.id}-delivered`,
+      unitCostMinor: shipment.quantity > 0 ? sanitizeMoney(deliveredCostMinor / shipment.quantity) : 0,
+      totalCostMinor: deliveredCostMinor,
+      costSourceType: "shipment_delivery",
+      costSourceId: linkedPurchase?.id ?? shipment.id
     });
 
     context.events.push({
@@ -8098,6 +8243,7 @@ function createEventImpacts(input: CreateEventImpactsInput): EventImpact[] {
 function inferEventDelta(event: DomainEvent): number {
   return (
     metadataNumber(event, "quantity") ||
+    metadataNumber(event, "grossMarginMinor") ||
     metadataNumber(event, "revenueMinor") ||
     metadataNumber(event, "unmetQuantity") ||
     metadataNumber(event, "claimsMinor") ||
@@ -8182,8 +8328,74 @@ function createExplanations(input: CreateExplanationsInput): Explanation[] {
     ...createShortageExplanations(input),
     ...createEventExplanations(input),
     ...createDemandChangeExplanations(input),
-    ...createLogisticsDelayExplanations(input)
+    ...createLogisticsDelayExplanations(input),
+    ...createProfitabilityExplanations(input)
   ].slice(0, 120);
+}
+
+function createProfitabilityExplanations(input: CreateExplanationsInput): Explanation[] {
+  const explanations: Explanation[] = [];
+  const salesEvents = input.events.filter((event) => event.type === "ProductSoldEvent" && metadataNumber(event, "revenueMinor") > 0);
+
+  for (const event of salesEvents) {
+    const companyId = metadataString(event, "companyId");
+    const productId = metadataString(event, "productId");
+
+    if (!companyId || !productId) {
+      continue;
+    }
+
+    const revenueMinor = metadataNumber(event, "revenueMinor");
+    const costOfGoodsSoldMinor = metadataNumber(event, "costOfGoodsSoldMinor");
+    const grossMarginMinor = metadataNumber(event, "grossMarginMinor");
+    const grossMarginRate = revenueMinor > 0 ? grossMarginMinor / revenueMinor : 0;
+    const product = input.products.find((candidate) => candidate.id === productId);
+    const company = input.companies.find((candidate) => candidate.id === companyId);
+    const marginMetricIds = input.metrics
+      .filter((metric) => metric.tags.companyId === companyId && metric.tags.productId === productId && metric.name.includes("gross_margin"))
+      .map((metric) => metric.id);
+    const impactIds = input.eventImpacts.filter((impact) => impact.eventId === event.id).map((impact) => impact.id);
+
+    explanations.push({
+      id: `${input.seed}-explanation-${input.nextTick}-${event.id}-gross-margin`,
+      tick: input.nextTick,
+      targetType: "profitability",
+      targetId: companyId,
+      eventId: event.id,
+      title: `${company?.name ?? "Company"} gross margin on ${product?.name ?? productId}`,
+      summary:
+        grossMarginMinor >= 0
+          ? `Retail revenue exceeded lot-level cost basis by ${grossMarginMinor} minor units. Revenue was ${revenueMinor}, cost of goods sold was ${costOfGoodsSoldMinor}.`
+          : `Retail revenue did not cover lot-level cost basis. Revenue was ${revenueMinor}, cost of goods sold was ${costOfGoodsSoldMinor}.`,
+      confidence: 0.88,
+      reliabilityId: input.dataReliability[0]?.id ?? null,
+      causes: [
+        {
+          label: "Retail revenue",
+          causeType: "demand",
+          value: revenueMinor,
+          weight: 0.45
+        },
+        {
+          label: "Lot cost basis / COGS",
+          causeType: "supply",
+          value: costOfGoodsSoldMinor,
+          weight: 0.4
+        },
+        {
+          label: "Gross margin rate",
+          causeType: grossMarginMinor >= 0 ? "demand" : "shortage",
+          value: grossMarginRate,
+          weight: 0.15
+        }
+      ],
+      impactIds,
+      relatedMetricIds: marginMetricIds,
+      relatedEntityIds: [companyId, productId]
+    });
+  }
+
+  return explanations.slice(0, 24);
 }
 
 function createPriceExplanations(input: CreateExplanationsInput): Explanation[] {
@@ -9244,9 +9456,24 @@ function getAvailableQuantity(inventoryLots: readonly InventoryLot[], warehouseI
   );
 }
 
+interface InventoryConsumptionCost {
+  readonly quantity: number;
+  readonly totalCostMinor: number;
+}
+
 function consumeInventory(inventoryLots: MutableInventoryLot[], warehouseId: string, productId: string, requestedQuantity: number): number {
+  return consumeInventoryWithCost(inventoryLots, warehouseId, productId, requestedQuantity).quantity;
+}
+
+function consumeInventoryWithCost(
+  inventoryLots: MutableInventoryLot[],
+  warehouseId: string,
+  productId: string,
+  requestedQuantity: number
+): InventoryConsumptionCost {
   let remainingQuantity = sanitizeQuantity(requestedQuantity);
   let consumedQuantity = 0;
+  let totalCostMinor = 0;
 
   for (const lot of inventoryLots) {
     if (remainingQuantity <= 0) {
@@ -9258,12 +9485,20 @@ function consumeInventory(inventoryLots: MutableInventoryLot[], warehouseId: str
     }
 
     const quantity = sanitizeQuantity(Math.min(lot.quantity, remainingQuantity));
+    const unitCostMinor = sanitizeMoney(lot.unitCostMinor ?? ((lot.totalCostMinor ?? 0) / Math.max(1, lot.quantity)));
+    const consumedCostMinor = sanitizeMoney(unitCostMinor * quantity);
     lot.quantity = sanitizeQuantity(lot.quantity - quantity);
+    lot.totalCostMinor = sanitizeMoney(Math.max(0, (lot.totalCostMinor ?? unitCostMinor * (lot.quantity + quantity)) - consumedCostMinor));
+    lot.unitCostMinor = lot.quantity > 0 ? sanitizeMoney(lot.totalCostMinor / lot.quantity) : unitCostMinor;
     remainingQuantity = sanitizeQuantity(remainingQuantity - quantity);
     consumedQuantity += quantity;
+    totalCostMinor += consumedCostMinor;
   }
 
-  return sanitizeQuantity(consumedQuantity);
+  return {
+    quantity: sanitizeQuantity(consumedQuantity),
+    totalCostMinor: sanitizeMoney(totalCostMinor)
+  };
 }
 
 interface AddInventoryInput {
@@ -9273,6 +9508,10 @@ interface AddInventoryInput {
   readonly quantity: number;
   readonly quality: number;
   readonly lotId: string;
+  readonly unitCostMinor?: number;
+  readonly totalCostMinor?: number;
+  readonly costSourceType?: InventoryLot["costSourceType"];
+  readonly costSourceId?: string | null;
 }
 
 function addInventory(input: AddInventoryInput): void {
@@ -9282,14 +9521,30 @@ function addInventory(input: AddInventoryInput): void {
     return;
   }
 
-  const existingLot = input.inventoryLots.find((lot) => lot.warehouseId === input.warehouseId && lot.productId === input.productId);
+  const totalCostMinor = sanitizeMoney(input.totalCostMinor ?? sanitizeMoney((input.unitCostMinor ?? 0) * quantity));
+  const unitCostMinor = quantity > 0 ? sanitizeMoney(input.unitCostMinor ?? totalCostMinor / quantity) : sanitizeMoney(input.unitCostMinor ?? 0);
+  const costSourceType = input.costSourceType ?? "system";
+  const costSourceId = input.costSourceId ?? null;
+  const existingLot = input.inventoryLots.find(
+    (lot) =>
+      lot.warehouseId === input.warehouseId &&
+      lot.productId === input.productId &&
+      (lot.costSourceType ?? "system") === costSourceType &&
+      (lot.costSourceId ?? null) === costSourceId
+  );
 
   if (existingLot) {
     const existingQuantity = existingLot.quantity;
+    const existingCostMinor = sanitizeMoney(existingLot.totalCostMinor ?? sanitizeMoney((existingLot.unitCostMinor ?? 0) * existingQuantity));
     const nextQuantity = sanitizeQuantity(existingQuantity + quantity);
+    const nextTotalCostMinor = sanitizeMoney(existingCostMinor + totalCostMinor);
     existingLot.quality =
       nextQuantity > 0 ? clamp((existingLot.quality * existingQuantity + clamp(input.quality, 0, 1) * quantity) / nextQuantity, 0, 1) : 0;
     existingLot.quantity = nextQuantity;
+    existingLot.totalCostMinor = nextTotalCostMinor;
+    existingLot.unitCostMinor = nextQuantity > 0 ? sanitizeMoney(nextTotalCostMinor / nextQuantity) : unitCostMinor;
+    existingLot.costSourceType = costSourceType;
+    existingLot.costSourceId = costSourceId;
     return;
   }
 
@@ -9298,7 +9553,11 @@ function addInventory(input: AddInventoryInput): void {
     warehouseId: input.warehouseId,
     productId: input.productId,
     quantity,
-    quality: clamp(input.quality, 0, 1)
+    quality: clamp(input.quality, 0, 1),
+    unitCostMinor,
+    totalCostMinor,
+    costSourceType,
+    costSourceId
   });
 }
 
@@ -9839,11 +10098,20 @@ function normalizeWorldState(state: WorldState): WorldState {
       cashBalanceMinor: sanitizeMoney(cohort.cashBalanceMinor),
       satisfaction: clamp(cohort.satisfaction, 0, 1)
     })),
-    inventoryLots: state.inventoryLots.map((lot) => ({
-      ...lot,
-      quantity: sanitizeQuantity(lot.quantity),
-      quality: clamp(lot.quality, 0, 1)
-    })),
+    inventoryLots: state.inventoryLots.map((lot) => {
+      const quantity = sanitizeQuantity(lot.quantity);
+      const totalCostMinor = sanitizeMoney(lot.totalCostMinor ?? sanitizeMoney((lot.unitCostMinor ?? 0) * quantity));
+
+      return {
+        ...lot,
+        quantity,
+        quality: clamp(lot.quality, 0, 1),
+        unitCostMinor: quantity > 0 ? sanitizeMoney(lot.unitCostMinor ?? totalCostMinor / quantity) : sanitizeMoney(lot.unitCostMinor ?? 0),
+        totalCostMinor,
+        costSourceType: lot.costSourceType ?? "seed",
+        costSourceId: lot.costSourceId ?? lot.id
+      };
+    }),
     shipments: (state.shipments ?? []).map((shipment) => ({
       ...shipment,
       quantity: sanitizeQuantity(shipment.quantity),
@@ -9927,16 +10195,33 @@ function normalizeWorldState(state: WorldState): WorldState {
       shipmentId: purchase.shipmentId ?? null,
       status: purchase.status ?? "completed"
     })),
-    manualProductionRuns: (state.manualProductionRuns ?? []).map((run) => ({
-      ...run,
-      tick: sanitizeQuantity(run.tick),
-      requestedQuantity: sanitizeQuantity(run.requestedQuantity),
-      producedQuantity: sanitizeQuantity(run.producedQuantity),
-      inputConsumptions: run.inputConsumptions.map((input) => ({
-        ...input,
-        quantity: sanitizeQuantity(input.quantity)
-      }))
-    }))
+    manualProductionRuns: (state.manualProductionRuns ?? []).map((run) => {
+      const inputConsumptions = run.inputConsumptions.map((consumption) => {
+        const quantity = sanitizeQuantity(consumption.quantity);
+        const totalCostMinor = sanitizeMoney(consumption.totalCostMinor ?? sanitizeMoney((consumption.unitCostMinor ?? 0) * quantity));
+
+        return {
+          ...consumption,
+          quantity,
+          unitCostMinor: quantity > 0 ? sanitizeMoney(consumption.unitCostMinor ?? totalCostMinor / quantity) : sanitizeMoney(consumption.unitCostMinor ?? 0),
+          totalCostMinor
+        };
+      });
+      const inputCostMinor = sanitizeMoney(run.inputCostMinor ?? inputConsumptions.reduce((total, consumption) => total + consumption.totalCostMinor, 0));
+      const producedQuantity = sanitizeQuantity(run.producedQuantity);
+      const outputTotalCostMinor = sanitizeMoney(run.outputTotalCostMinor ?? inputCostMinor);
+
+      return {
+        ...run,
+        tick: sanitizeQuantity(run.tick),
+        requestedQuantity: sanitizeQuantity(run.requestedQuantity),
+        producedQuantity,
+        inputConsumptions,
+        inputCostMinor,
+        outputUnitCostMinor: producedQuantity > 0 ? sanitizeMoney(run.outputUnitCostMinor ?? outputTotalCostMinor / producedQuantity) : sanitizeMoney(run.outputUnitCostMinor ?? 0),
+        outputTotalCostMinor
+      };
+    })
   };
 }
 
@@ -10337,6 +10622,8 @@ export function assertNoInvalidEconomyValues(state: WorldState): void {
   for (const lot of state.inventoryLots) {
     check(`inventory.${lot.id}.quantity`, lot.quantity);
     check(`inventory.${lot.id}.quality`, lot.quality);
+    check(`inventory.${lot.id}.unitCostMinor`, lot.unitCostMinor ?? 0);
+    check(`inventory.${lot.id}.totalCostMinor`, lot.totalCostMinor ?? 0);
   }
 
   for (const warehouse of state.warehouses) {
@@ -10376,8 +10663,14 @@ export function assertNoInvalidEconomyValues(state: WorldState): void {
     check(`manualProductionRun.${run.id}.requestedQuantity`, run.requestedQuantity);
     check(`manualProductionRun.${run.id}.producedQuantity`, run.producedQuantity);
 
+    check(`manualProductionRun.${run.id}.inputCostMinor`, run.inputCostMinor ?? 0);
+    check(`manualProductionRun.${run.id}.outputUnitCostMinor`, run.outputUnitCostMinor ?? 0);
+    check(`manualProductionRun.${run.id}.outputTotalCostMinor`, run.outputTotalCostMinor ?? 0);
+
     for (const input of run.inputConsumptions) {
       check(`manualProductionRun.${run.id}.${input.productId}.quantity`, input.quantity);
+      check(`manualProductionRun.${run.id}.${input.productId}.unitCostMinor`, input.unitCostMinor ?? 0);
+      check(`manualProductionRun.${run.id}.${input.productId}.totalCostMinor`, input.totalCostMinor ?? 0);
     }
   }
 

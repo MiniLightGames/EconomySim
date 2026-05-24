@@ -5,6 +5,7 @@ export type TransportMode = "road" | "rail" | "sea" | "multimodal";
 export type ShipmentStatus = "pending" | "in_transit" | "delivered" | "blocked" | "cancelled";
 export type ResourcePurchaseDeliveryMode = "pickup" | "delivery";
 export type ResourcePurchaseStatus = "completed" | "ordered" | "in_transit" | "delivered" | "failed";
+export type InventoryCostSourceType = "seed" | "resource_purchase" | "shipment_delivery" | "production" | "retail_return" | "system" | "mixed";
 export type FinancialAssetType = "stock" | "bond" | "currency" | "commodity";
 export type OrderSide = "buy" | "sell";
 export type OrderStatus = "open" | "partially_filled" | "filled" | "cancelled" | "rejected";
@@ -59,7 +60,7 @@ export type ReputationPenaltyTargetType = "company" | "player";
 export type IllegalContractStatus = "draft" | "active" | "fulfilled" | "exposed" | "cancelled";
 export type EnforcementOutcome = "none" | "cleared" | "fine" | "confiscation" | "activity_ban";
 export type NewsCategory = "economic" | "political" | "military" | "corporate" | "exchange" | "criminal" | "ecological";
-export type ExplanationTargetType = "price" | "shortage" | "bankruptcy" | "migration" | "war" | "protest" | "demand" | "logistics" | "country" | "company" | "product";
+export type ExplanationTargetType = "price" | "shortage" | "bankruptcy" | "migration" | "war" | "protest" | "demand" | "logistics" | "country" | "company" | "product" | "profitability";
 export type EventCauseType =
   | "demand"
   | "supply"
@@ -195,6 +196,10 @@ export interface InventoryLot {
   readonly productId: EntityId;
   readonly quantity: number;
   readonly quality: number;
+  readonly unitCostMinor?: number;
+  readonly totalCostMinor?: number;
+  readonly costSourceType?: InventoryCostSourceType;
+  readonly costSourceId?: EntityId | null;
 }
 
 export interface ProductionInput {
@@ -269,6 +274,8 @@ export interface ResourcePurchase {
 export interface ProductionRunInputConsumption {
   readonly productId: EntityId;
   readonly quantity: number;
+  readonly unitCostMinor: number;
+  readonly totalCostMinor: number;
 }
 
 export interface ManualProductionRun {
@@ -282,6 +289,9 @@ export interface ManualProductionRun {
   readonly requestedQuantity: number;
   readonly producedQuantity: number;
   readonly inputConsumptions: readonly ProductionRunInputConsumption[];
+  readonly inputCostMinor: number;
+  readonly outputUnitCostMinor: number;
+  readonly outputTotalCostMinor: number;
   readonly status: "completed";
 }
 

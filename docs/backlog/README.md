@@ -54,3 +54,5 @@ ADR-XXXX-short-name.md
 - `P1-TASK-20260524-0032-player-resource-logistics-delivery-loop.md`
 - `P1-TASK-20260524-0033-player-margin-accounting.md`
 - `P1-TASK-20260524-0034-first-business-onboarding-ui.md`
+- `P1-TASK-20260524-0035-land-premise-lease-model.md`
+- `P1-TASK-20260524-0036-seed-scale-balance-v1.md`
