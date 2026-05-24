@@ -94,6 +94,39 @@ export interface PlayerCommandJournalInput {
   readonly affectedEntityIds: readonly string[];
 }
 
+export interface NormalizedWorldReadModel {
+  readonly companies: readonly unknown[];
+  readonly accounts: readonly unknown[];
+  readonly warehouses: readonly unknown[];
+  readonly inventoryLots: readonly unknown[];
+  readonly productionPlans: readonly unknown[];
+  readonly retailOffers: readonly unknown[];
+  readonly resourceOffers: readonly unknown[];
+  readonly resourcePurchases: readonly unknown[];
+  readonly manualProductionRuns: readonly unknown[];
+  readonly retailPriceChanges: readonly unknown[];
+  readonly financialTransactions: readonly unknown[];
+  readonly events: readonly unknown[];
+  readonly metrics: readonly unknown[];
+  readonly news: readonly unknown[];
+  readonly eventCauses: readonly unknown[];
+  readonly eventImpacts: readonly unknown[];
+  readonly explanations: readonly unknown[];
+  readonly playerCommands: readonly PlayerCommandJournalInput[];
+  readonly auditLogs: readonly unknown[];
+}
+
+export interface PersistenceConsistencyStatus {
+  readonly mode: "memory" | "snapshot-plus-normalized";
+  readonly status: "memory" | "empty" | "consistent" | "snapshot-only" | "normalized-ahead" | "snapshot-ahead" | "diverged" | "degraded";
+  readonly snapshotTick: number | null;
+  readonly normalizedLatestTick: number | null;
+  readonly hydratedFromNormalized: boolean;
+  readonly snapshotFallbackAvailable: boolean;
+  readonly normalizedSources: readonly string[];
+  readonly message?: string;
+}
+
 export interface WorldPersistenceContract {
   readonly mode: "snapshot-plus-normalized";
   saveSnapshotAndCoreEntities(input: {
@@ -101,6 +134,11 @@ export interface WorldPersistenceContract {
     readonly tick: number;
     readonly stateHash: string;
   }): Promise<void>;
+  loadSnapshotAndNormalizedReadModel(): Promise<{
+    readonly snapshotState: unknown | null;
+    readonly normalized: NormalizedWorldReadModel;
+    readonly consistency: PersistenceConsistencyStatus;
+  }>;
   appendPlayerCommand(input: PlayerCommandJournalInput): Promise<void>;
   appendAudit(input: {
     readonly userId: string | null;
@@ -119,8 +157,10 @@ export interface WorldPersistenceContract {
 }
 
 export const PERSISTENCE_CONTRACT_NOTES = [
-  "Snapshots remain the rollback safety layer.",
-  "Companies, accounts, warehouses, production plans, offers, inventory lots, command records, audit logs, events, and metrics are durable normalized rows.",
+  "Snapshots remain the rollback safety layer, not the primary read path for the player operations loop.",
+  "Companies, accounts, warehouses, production plans, offers, inventory lots, command records, audit logs, events, metrics, news, explanations, and financial transactions are durable normalized rows.",
+  "Prisma reads hydrate the key player loop from normalized tables and merge it over the latest snapshot fallback.",
+  "Consistency status must expose snapshot tick vs normalized latest tick for API health, debugging, and recovery decisions.",
   "Every player command stores idempotency key, lifecycle status, and links to resulting events, metrics, and financial transactions.",
   "All command writes must be executed inside a Prisma transaction boundary before the snapshot is appended.",
   "Auth binds user -> session -> player on the backend; request bodies are not trusted for playerId."

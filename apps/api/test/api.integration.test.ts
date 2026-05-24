@@ -23,8 +23,9 @@ describe("Fastify API integration", () => {
     await app.close();
   });
 
-  it("returns health status", async () => {
+  it("returns health and persistence consistency status", async () => {
     const response = await app.inject({ method: "GET", url: "/health" });
+    const consistencyResponse = await app.inject({ method: "GET", url: "/persistence/consistency" });
     const body = response.json();
 
     expect(response.statusCode).toBe(200);
@@ -34,7 +35,16 @@ describe("Fastify API integration", () => {
       store: {
         kind: "memory",
         status: "ok"
+      },
+      persistence: {
+        mode: "memory",
+        status: "memory"
       }
+    });
+    expect(consistencyResponse.statusCode).toBe(200);
+    expect(consistencyResponse.json()).toMatchObject({
+      snapshotTick: 0,
+      normalizedLatestTick: null
     });
   });
 

@@ -53,3 +53,4 @@ ADR-XXXX-short-name.md
 - `P1-TASK-20260524-0031-command-journal-idempotency-audit.md`
 - `P1-TASK-20260524-0032-player-resource-logistics-delivery-loop.md`
 - `P1-TASK-20260524-0033-player-margin-accounting.md`
+- `P1-TASK-20260524-0034-first-business-onboarding-ui.md`

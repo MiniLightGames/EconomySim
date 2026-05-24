@@ -47,14 +47,17 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
 
   app.get("/health", async () => {
     const storeHealth = await store.health();
+    const persistence = await store.consistencyStatus();
 
     return {
       status: "ok",
       service: "economysim-api",
       store: storeHealth,
+      persistence,
       checks: {
         api: "up",
-        database: storeHealth.kind === "prisma" ? storeHealth.status : "not-required-memory-store"
+        database: storeHealth.kind === "prisma" ? storeHealth.status : "not-required-memory-store",
+        consistency: persistence.status
       }
     };
   });
@@ -63,14 +66,18 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
 
   app.get("/world/summary", async () => {
     const state = await store.loadWorld();
+    const persistence = await store.consistencyStatus();
 
     return {
       ...summarizeWorld(state),
       invariants: ECONOMY_INVARIANTS,
+      persistence,
       lastEvent: state.events.at(-1) ?? null,
       lastNews: state.news.at(-1) ?? null
     };
   });
+
+  app.get("/persistence/consistency", async () => store.consistencyStatus());
 
   app.get("/countries", async () => {
     const state = await store.loadWorld();

@@ -34,8 +34,10 @@ function assertLedgerTransactionBalanced(transaction) {
     }
 }
 exports.PERSISTENCE_CONTRACT_NOTES = [
-    "Snapshots remain the rollback safety layer.",
-    "Companies, accounts, warehouses, production plans, offers, inventory lots, command records, audit logs, events, and metrics are durable normalized rows.",
+    "Snapshots remain the rollback safety layer, not the primary read path for the player operations loop.",
+    "Companies, accounts, warehouses, production plans, offers, inventory lots, command records, audit logs, events, metrics, news, explanations, and financial transactions are durable normalized rows.",
+    "Prisma reads hydrate the key player loop from normalized tables and merge it over the latest snapshot fallback.",
+    "Consistency status must expose snapshot tick vs normalized latest tick for API health, debugging, and recovery decisions.",
     "Every player command stores idempotency key, lifecycle status, and links to resulting events, metrics, and financial transactions.",
     "All command writes must be executed inside a Prisma transaction boundary before the snapshot is appended.",
     "Auth binds user -> session -> player on the backend; request bodies are not trusted for playerId."
