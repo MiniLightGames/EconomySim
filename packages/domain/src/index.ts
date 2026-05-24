@@ -75,6 +75,12 @@ export type EventCauseType =
 export type DataReliabilityGrade = "high" | "medium" | "low" | "manipulated";
 export type PlayerCommandRecordStatus = "received" | "validated" | "accepted" | "rejected" | "applied" | "failed";
 export type AuditLogResult = "received" | "validated" | "accepted" | "rejected" | "applied" | "failed" | "duplicate";
+export type CommandBatchFailurePolicy = "all_or_nothing" | "partial";
+
+export interface PlayerCommandBatchDependencyHints {
+  readonly temporaryRef?: EntityId;
+  readonly dependsOn?: readonly EntityId[];
+}
 
 export interface GeoPoint {
   readonly lat: number;
@@ -1505,7 +1511,7 @@ export interface WorldState {
   readonly snapshots: readonly Snapshot[];
 }
 
-export interface CreateCompanyCommand {
+export interface CreateCompanyCommand extends PlayerCommandBatchDependencyHints {
   readonly type: "CreateCompanyCommand";
   readonly commandId: EntityId;
   readonly playerId: EntityId;
@@ -1513,7 +1519,7 @@ export interface CreateCompanyCommand {
   readonly name: string;
 }
 
-export interface BuyLandCommand {
+export interface BuyLandCommand extends PlayerCommandBatchDependencyHints {
   readonly type: "BuyLandCommand";
   readonly commandId: EntityId;
   readonly playerId: EntityId;
@@ -1523,7 +1529,7 @@ export interface BuyLandCommand {
   readonly mode?: "purchase" | "lease";
 }
 
-export interface BuyResourceCommand {
+export interface BuyResourceCommand extends PlayerCommandBatchDependencyHints {
   readonly type: "BuyResourceCommand";
   readonly commandId: EntityId;
   readonly playerId: EntityId;
@@ -1534,7 +1540,7 @@ export interface BuyResourceCommand {
   readonly buyerWarehouseId?: EntityId;
 }
 
-export interface RunManualProductionCommand {
+export interface RunManualProductionCommand extends PlayerCommandBatchDependencyHints {
   readonly type: "RunManualProductionCommand";
   readonly commandId: EntityId;
   readonly playerId: EntityId;
@@ -1543,7 +1549,7 @@ export interface RunManualProductionCommand {
   readonly requestedQuantity: number;
 }
 
-export interface SetRetailPriceCommand {
+export interface SetRetailPriceCommand extends PlayerCommandBatchDependencyHints {
   readonly type: "SetRetailPriceCommand";
   readonly commandId: EntityId;
   readonly playerId: EntityId;
@@ -1575,7 +1581,8 @@ export const ECONOMY_INVARIANTS = [
   "Private company finances stay hidden unless the company is publicly listed.",
   "Public statistics carry reliability and manipulation-risk metadata.",
   "Important actions create audit log records, events, and metrics.",
-  "Player command records link idempotency keys to resulting events, metrics, and financial transactions."
+  "Player command records link idempotency keys to resulting events, metrics, and financial transactions.",
+  "Dependent command batches resolve temporary references through deterministic command results before a tick mutates world state."
 ] as const;
 
 export function createInitialWorldState(seed = "demo"): WorldState {

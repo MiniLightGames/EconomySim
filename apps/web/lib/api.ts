@@ -60,6 +60,7 @@ import type {
   WarDamage,
   Warehouse,
   ManualProductionRun,
+  PlayerCommandRecord,
   WorldState
 } from "@economysim/domain";
 
@@ -403,9 +404,43 @@ export interface CountryBudgetDto {
   readonly subsidies: WorldState["subsidies"];
 }
 
+export interface CommandResultDto {
+  readonly commandId: string;
+  readonly commandType: string;
+  readonly status: string;
+  readonly idempotencyKey: string;
+  readonly temporaryRef: string | null;
+  readonly rejectionCode: string | null;
+  readonly rejectionMessage: string | null;
+  readonly createdCompanyId: string | null;
+  readonly warehouseId: string | null;
+  readonly productionPlanId: string | null;
+  readonly retailOfferId: string | null;
+  readonly resourcePurchaseId: string | null;
+  readonly productionRunId: string | null;
+  readonly retailPriceChangeId: string | null;
+  readonly eventIds: readonly string[];
+  readonly metricIds: readonly string[];
+  readonly financialTransactionIds: readonly string[];
+}
+
+export interface CommandBatchDto {
+  readonly idempotencyKey: string;
+  readonly failurePolicy: "all_or_nothing" | "partial";
+  readonly status: "applied" | "partial" | "rejected" | "failed" | "duplicate" | "ticked";
+  readonly commandResults: readonly CommandResultDto[];
+  readonly dependencyOrder: readonly string[];
+  readonly temporaryRefs: Readonly<Record<string, string>>;
+  readonly rejectedCommands: readonly unknown[];
+}
+
 export interface TickResponseDto {
   readonly summary: WorldSummaryDto;
   readonly acceptedCommands: readonly string[];
+  readonly commandRecords?: readonly PlayerCommandRecord[];
+  readonly commandResults?: readonly CommandResultDto[];
+  readonly batch?: CommandBatchDto;
+  readonly duplicate?: boolean;
   readonly events: readonly unknown[];
   readonly metrics: readonly Metric[];
   readonly news: readonly NewsItem[];

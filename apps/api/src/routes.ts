@@ -896,7 +896,8 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
           session,
           seed,
           idempotencyKey: resolveIdempotencyKey(request, "SimulationTickCommandBatch"),
-          actionType: "SimulationTickCommandBatch"
+          actionType: "SimulationTickCommandBatch",
+          failurePolicy: body.failurePolicy
         })
       : await runJournaledCommandBatch({
           store,
@@ -905,7 +906,8 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
           session,
           seed,
           idempotencyKey: `${seed}-tick-${state.currentTick + 1}`,
-          actionType: "WorldTick"
+          actionType: "WorldTick",
+          failurePolicy: body.failurePolicy
         });
     const result = execution.tickResult;
 
@@ -913,6 +915,8 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
       summary: summarizeWorld(execution.state),
       acceptedCommands: result?.acceptedCommands ?? execution.commandRecords.map((record) => record.commandId),
       commandRecords: execution.commandRecords,
+      commandResults: execution.batch.commandResults,
+      batch: execution.batch,
       duplicate: execution.duplicate,
       events: execution.events,
       metrics: execution.metrics,

@@ -431,28 +431,6 @@ export function runTick(input: TickInput): TickResult {
   const rejectedCommands: RejectedCommand[] = [];
   const commandEvents: DomainEvent[] = [];
 
-  for (const command of input.commands) {
-    const rejection = validateCommand(loadedState, command);
-
-    if (rejection) {
-      rejectedCommands.push(rejection);
-      continue;
-    }
-
-    acceptedCommands.push(command.commandId);
-    commandEvents.push({
-      id: `${input.seed}-event-${nextTick}-${command.commandId}`,
-      tick: nextTick,
-      type: "CommandAcceptedEvent",
-      message: `${command.type} accepted for simulation processing.`,
-      entityIds: [command.playerId],
-      metadata: {
-        commandId: command.commandId,
-        commandType: command.type
-      }
-    });
-  }
-
   const countries: MutableCountry[] = loadedState.countries.map((country) => ({ ...country }));
   const cities: MutableCity[] = loadedState.cities.map((city) => ({ ...city }));
   const companies: MutableCompany[] = loadedState.companies.map((company) => ({ ...company }));
@@ -589,9 +567,25 @@ export function runTick(input: TickInput): TickResult {
   };
 
   for (const command of input.commands) {
-    if (rejectedCommands.some((rejection) => rejection.commandId === command.commandId)) {
+    const rejection = validateCommand(commandAdjustedState, command);
+
+    if (rejection) {
+      rejectedCommands.push(rejection);
       continue;
     }
+
+    acceptedCommands.push(command.commandId);
+    commandEvents.push({
+      id: `${input.seed}-event-${nextTick}-${command.commandId}`,
+      tick: nextTick,
+      type: "CommandAcceptedEvent",
+      message: `${command.type} accepted for simulation processing.`,
+      entityIds: [command.playerId],
+      metadata: {
+        commandId: command.commandId,
+        commandType: command.type
+      }
+    });
 
     applyAcceptedPlayerCommand({
       state: commandAdjustedState,

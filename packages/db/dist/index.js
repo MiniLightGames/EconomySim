@@ -38,8 +38,9 @@ exports.PERSISTENCE_CONTRACT_NOTES = [
     "Companies, accounts, warehouses, production plans, offers, inventory lots, command records, audit logs, events, metrics, news, explanations, and financial transactions are durable normalized rows.",
     "Prisma reads hydrate the key player loop from normalized tables and merge it over the latest snapshot fallback.",
     "Consistency status must expose snapshot tick vs normalized latest tick for API health, debugging, and recovery decisions.",
-    "Every player command stores idempotency key, lifecycle status, and links to resulting events, metrics, and financial transactions.",
+    "Every player command stores idempotency key, lifecycle status, temporary refs when present, and links to resulting events, metrics, and financial transactions.",
     "All command writes must be executed inside a Prisma transaction boundary before the snapshot is appended.",
+    "Dependent command batches must persist resolved command records and command result links so snapshots remain replayable.",
     "Auth binds user -> session -> player on the backend; request bodies and identity headers are not trusted for playerId.",
     "RBAC starts with player, developer, and admin roles; developer/admin gates protect debug, rollback, snapshot, and constructor-publish operations."
 ];

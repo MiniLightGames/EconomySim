@@ -4,6 +4,14 @@ export const idParamsSchema = z.object({
   id: z.string().trim().min(1).max(160)
 });
 
+
+const temporaryRefSchema = z.string().trim().regex(/^\$[a-z][a-z0-9-]*:[a-z0-9][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$/i, "Temporary references must look like $entity:alias.").max(160);
+const commandDependencySchema = z.array(z.string().trim().min(1).max(160)).max(20).default([]);
+const commandBatchHintsSchema = {
+  temporaryRef: temporaryRefSchema.optional(),
+  dependsOn: commandDependencySchema.optional()
+};
+
 export const createCompanyBodySchema = z.object({
   countryId: z.string().trim().min(1).max(160),
   name: z.string().trim().min(2).max(80)
@@ -17,6 +25,7 @@ export const landPurchaseBodySchema = z.object({
 });
 
 export const createCompanyCommandSchema = z.object({
+  ...commandBatchHintsSchema,
   type: z.literal("CreateCompanyCommand"),
   commandId: z.string().trim().min(1).max(160),
   countryId: z.string().trim().min(1).max(160),
@@ -24,6 +33,7 @@ export const createCompanyCommandSchema = z.object({
 });
 
 export const buyLandCommandSchema = z.object({
+  ...commandBatchHintsSchema,
   type: z.literal("BuyLandCommand"),
   commandId: z.string().trim().min(1).max(160),
   companyId: z.string().trim().min(1).max(160),
@@ -33,6 +43,7 @@ export const buyLandCommandSchema = z.object({
 });
 
 export const buyResourceCommandSchema = z.object({
+  ...commandBatchHintsSchema,
   type: z.literal("BuyResourceCommand"),
   commandId: z.string().trim().min(1).max(160),
   buyerCompanyId: z.string().trim().min(1).max(160),
@@ -43,6 +54,7 @@ export const buyResourceCommandSchema = z.object({
 });
 
 export const runManualProductionCommandSchema = z.object({
+  ...commandBatchHintsSchema,
   type: z.literal("RunManualProductionCommand"),
   commandId: z.string().trim().min(1).max(160),
   companyId: z.string().trim().min(1).max(160),
@@ -51,6 +63,7 @@ export const runManualProductionCommandSchema = z.object({
 });
 
 export const setRetailPriceCommandSchema = z.object({
+  ...commandBatchHintsSchema,
   type: z.literal("SetRetailPriceCommand"),
   commandId: z.string().trim().min(1).max(160),
   companyId: z.string().trim().min(1).max(160),
@@ -69,9 +82,10 @@ export const playerCommandSchema = z.discriminatedUnion("type", [
 
 export const simulationTickBodySchema = z
   .object({
-    commands: z.array(playerCommandSchema).max(50).default([])
+    commands: z.array(playerCommandSchema).max(50).default([]),
+    failurePolicy: z.enum(["all_or_nothing", "partial"]).default("all_or_nothing")
   })
-  .default({ commands: [] });
+  .default({ commands: [], failurePolicy: "all_or_nothing" });
 
 export const createShipmentBodySchema = z.object({
   originWarehouseId: z.string().trim().min(1).max(160),

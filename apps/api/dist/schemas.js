@@ -5,6 +5,12 @@ const zod_1 = require("zod");
 exports.idParamsSchema = zod_1.z.object({
     id: zod_1.z.string().trim().min(1).max(160)
 });
+const temporaryRefSchema = zod_1.z.string().trim().regex(/^\$[a-z][a-z0-9-]*:[a-z0-9][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$/i, "Temporary references must look like $entity:alias.").max(160);
+const commandDependencySchema = zod_1.z.array(zod_1.z.string().trim().min(1).max(160)).max(20).default([]);
+const commandBatchHintsSchema = {
+    temporaryRef: temporaryRefSchema.optional(),
+    dependsOn: commandDependencySchema.optional()
+};
 exports.createCompanyBodySchema = zod_1.z.object({
     countryId: zod_1.z.string().trim().min(1).max(160),
     name: zod_1.z.string().trim().min(2).max(80)
@@ -16,12 +22,14 @@ exports.landPurchaseBodySchema = zod_1.z.object({
     mode: zod_1.z.enum(["purchase", "lease"]).default("purchase")
 });
 exports.createCompanyCommandSchema = zod_1.z.object({
+    ...commandBatchHintsSchema,
     type: zod_1.z.literal("CreateCompanyCommand"),
     commandId: zod_1.z.string().trim().min(1).max(160),
     countryId: zod_1.z.string().trim().min(1).max(160),
     name: zod_1.z.string().trim().min(2).max(80)
 });
 exports.buyLandCommandSchema = zod_1.z.object({
+    ...commandBatchHintsSchema,
     type: zod_1.z.literal("BuyLandCommand"),
     commandId: zod_1.z.string().trim().min(1).max(160),
     companyId: zod_1.z.string().trim().min(1).max(160),
@@ -30,6 +38,7 @@ exports.buyLandCommandSchema = zod_1.z.object({
     mode: zod_1.z.enum(["purchase", "lease"]).optional()
 });
 exports.buyResourceCommandSchema = zod_1.z.object({
+    ...commandBatchHintsSchema,
     type: zod_1.z.literal("BuyResourceCommand"),
     commandId: zod_1.z.string().trim().min(1).max(160),
     buyerCompanyId: zod_1.z.string().trim().min(1).max(160),
@@ -39,6 +48,7 @@ exports.buyResourceCommandSchema = zod_1.z.object({
     buyerWarehouseId: zod_1.z.string().trim().min(1).max(160).optional()
 });
 exports.runManualProductionCommandSchema = zod_1.z.object({
+    ...commandBatchHintsSchema,
     type: zod_1.z.literal("RunManualProductionCommand"),
     commandId: zod_1.z.string().trim().min(1).max(160),
     companyId: zod_1.z.string().trim().min(1).max(160),
@@ -46,6 +56,7 @@ exports.runManualProductionCommandSchema = zod_1.z.object({
     requestedQuantity: zod_1.z.number().int().positive().max(1_000_000_000)
 });
 exports.setRetailPriceCommandSchema = zod_1.z.object({
+    ...commandBatchHintsSchema,
     type: zod_1.z.literal("SetRetailPriceCommand"),
     commandId: zod_1.z.string().trim().min(1).max(160),
     companyId: zod_1.z.string().trim().min(1).max(160),
@@ -62,9 +73,10 @@ exports.playerCommandSchema = zod_1.z.discriminatedUnion("type", [
 ]);
 exports.simulationTickBodySchema = zod_1.z
     .object({
-    commands: zod_1.z.array(exports.playerCommandSchema).max(50).default([])
+    commands: zod_1.z.array(exports.playerCommandSchema).max(50).default([]),
+    failurePolicy: zod_1.z.enum(["all_or_nothing", "partial"]).default("all_or_nothing")
 })
-    .default({ commands: [] });
+    .default({ commands: [], failurePolicy: "all_or_nothing" });
 exports.createShipmentBodySchema = zod_1.z.object({
     originWarehouseId: zod_1.z.string().trim().min(1).max(160),
     destinationWarehouseId: zod_1.z.string().trim().min(1).max(160),

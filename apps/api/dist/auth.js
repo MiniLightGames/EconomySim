@@ -106,7 +106,7 @@ function createAuthPreHandler(repository, options) {
         rejectForgedIdentity(request);
         const token = readBearerToken(request) ?? readHeader(request, "x-economysim-session-token");
         const session = token ? await repository.resolveSession(token) : null;
-        const resolvedSession = session ?? (options.allowDemoFallback ? DEMO_SESSIONS.player : null);
+        const resolvedSession = session ?? (options.allowDemoFallback ? DEV_SESSIONS["dev-player-session"] : null);
         if (!resolvedSession) {
             throw (0, errors_1.unauthorized)("AUTH_SESSION_REQUIRED", "A valid EconomySim session token is required.");
         }

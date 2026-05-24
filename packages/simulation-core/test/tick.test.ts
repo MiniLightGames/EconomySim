@@ -114,6 +114,41 @@ describe("runTick", () => {
     expect(result.metrics.some((metric) => metric.name === "war.intensity")).toBe(true);
   });
 
+  it("applies dependent create-company and buy-premise commands in one deterministic tick", () => {
+    const seed = "dependent-batch";
+    const state = createInitialWorldState(seed);
+    const companyId = `${seed}-company-1-nova-batch-foods`;
+    const result = runTick({
+      state,
+      seed,
+      commands: [
+        {
+          type: "CreateCompanyCommand",
+          commandId: "cmd-create-company",
+          playerId: "player-1",
+          countryId: `${seed}-country-north-coast`,
+          name: "Nova Batch Foods"
+        },
+        {
+          type: "BuyLandCommand",
+          commandId: "cmd-buy-premise",
+          playerId: "player-1",
+          companyId,
+          cityId: `${seed}-city-harborview`,
+          lotId: `${seed}-city-harborview-starter-premise`,
+          mode: "lease"
+        }
+      ]
+    });
+
+    expect(result.acceptedCommands).toEqual(["cmd-create-company", "cmd-buy-premise"]);
+    expect(result.rejectedCommands).toHaveLength(0);
+    expect(result.state.companies.some((company) => company.id === companyId)).toBe(true);
+    expect(result.state.warehouses.some((warehouse) => warehouse.companyId === companyId)).toBe(true);
+    expect(result.state.productionPlans.some((plan) => plan.companyId === companyId)).toBe(true);
+    expect(result.state.retailOffers.some((offer) => offer.companyId === companyId)).toBe(true);
+  });
+
   it("runs the first player business vertical slice only through tick commands", () => {
     let state = createInitialWorldState("ops-command-vertical");
     const created = runTick({

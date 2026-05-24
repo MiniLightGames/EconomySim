@@ -2,6 +2,7 @@ import type { FastifyRequest } from "fastify";
 import type {
   AuditLog,
   AuditLogResult,
+  CommandBatchFailurePolicy,
   DomainEvent,
   FinancialTransaction,
   Metric,
@@ -11,11 +12,41 @@ import type {
   WorldState
 } from "@economysim/domain";
 import { runTick } from "@economysim/simulation-core";
-import type { TickResult } from "@economysim/simulation-core";
-import { badRequest, ApiError } from "./errors";
+import type { RejectedCommand, TickResult } from "@economysim/simulation-core";
+import { ApiError, badRequest } from "./errors";
 import type { AuthenticatedPlayerSession } from "./auth";
 import type { WorldStore } from "./store";
 import { validatePlayerCommandsAgainstWorld } from "./validation";
+
+export interface CommandExecutionResult {
+  readonly commandId: string;
+  readonly commandType: PlayerCommand["type"];
+  readonly status: PlayerCommandRecordStatus;
+  readonly idempotencyKey: string;
+  readonly temporaryRef: string | null;
+  readonly rejectionCode: string | null;
+  readonly rejectionMessage: string | null;
+  readonly createdCompanyId: string | null;
+  readonly warehouseId: string | null;
+  readonly productionPlanId: string | null;
+  readonly retailOfferId: string | null;
+  readonly resourcePurchaseId: string | null;
+  readonly productionRunId: string | null;
+  readonly retailPriceChangeId: string | null;
+  readonly eventIds: readonly string[];
+  readonly metricIds: readonly string[];
+  readonly financialTransactionIds: readonly string[];
+}
+
+export interface JournaledCommandBatchSummary {
+  readonly idempotencyKey: string;
+  readonly failurePolicy: CommandBatchFailurePolicy;
+  readonly status: "applied" | "partial" | "rejected" | "failed" | "duplicate" | "ticked";
+  readonly commandResults: readonly CommandExecutionResult[];
+  readonly dependencyOrder: readonly string[];
+  readonly temporaryRefs: Readonly<Record<string, string>>;
+  readonly rejectedCommands: readonly RejectedCommand[];
+}
 
 export interface JournaledCommandExecution {
   readonly state: WorldState;
@@ -25,6 +56,14 @@ export interface JournaledCommandExecution {
   readonly metrics: readonly Metric[];
   readonly financialTransactions: readonly FinancialTransaction[];
   readonly duplicate: boolean;
+  readonly batch: JournaledCommandBatchSummary;
+}
+
+interface PreparedCommandBatch {
+  readonly commands: readonly PlayerCommand[];
+  readonly dependencyOrder: readonly string[];
+  readonly temporaryRefs: Readonly<Record<string, string>>;
+  readonly hasIntraBatchDependencies: boolean;
 }
 
 export function resolveIdempotencyKey(request: FastifyRequest, actionType: string): string {
@@ -56,6 +95,7 @@ export async function runJournaledCommand(input: {
   readonly seed: string;
   readonly idempotencyKey: string;
   readonly actionType: string;
+  readonly failurePolicy?: CommandBatchFailurePolicy;
 }): Promise<JournaledCommandExecution> {
   return runJournaledCommandBatch({
     store: input.store,
@@ -64,7 +104,8 @@ export async function runJournaledCommand(input: {
     session: input.session,
     seed: input.seed,
     idempotencyKey: input.idempotencyKey,
-    actionType: input.actionType
+    actionType: input.actionType,
+    failurePolicy: input.failurePolicy ?? "all_or_nothing"
   });
 }
 
@@ -76,7 +117,10 @@ export async function runJournaledCommandBatch(input: {
   readonly seed: string;
   readonly idempotencyKey: string;
   readonly actionType: string;
+  readonly failurePolicy?: CommandBatchFailurePolicy;
 }): Promise<JournaledCommandExecution> {
+  const failurePolicy = input.failurePolicy ?? "all_or_nothing";
+
   if (input.commands.length === 0) {
     const tickResult = runTick({ state: input.state, commands: [], seed: input.seed });
     await input.store.saveWorld(tickResult.state);
@@ -88,11 +132,26 @@ export async function runJournaledCommandBatch(input: {
       events: tickResult.events,
       metrics: tickResult.metrics,
       financialTransactions: tickResult.state.financialTransactions.filter((transaction) => transaction.tick === tickResult.state.currentTick),
-      duplicate: false
+      duplicate: false,
+      batch: {
+        idempotencyKey: input.idempotencyKey,
+        failurePolicy,
+        status: "ticked",
+        commandResults: [],
+        dependencyOrder: [],
+        temporaryRefs: {},
+        rejectedCommands: []
+      }
     };
   }
 
-  const scopedKeys = input.commands.map((_command, index) => commandScopedIdempotencyKey(input.idempotencyKey, index, input.commands.length));
+  const prepared = prepareDependentCommandBatch({
+    state: input.state,
+    commands: input.commands,
+    seed: input.seed
+  });
+  const commands = prepared.commands;
+  const scopedKeys = commands.map((_command, index) => commandScopedIdempotencyKey(input.idempotencyKey, index, commands.length));
   const duplicateRecords = scopedKeys
     .map((key) => findCommandByIdempotencyKey(input.state, input.session.playerId, key))
     .filter((record): record is PlayerCommandRecord => Boolean(record));
@@ -118,6 +177,7 @@ export async function runJournaledCommandBatch(input: {
     await input.store.saveWorld(duplicateState);
 
     const links = collectRecordsLinks(duplicateState, duplicateRecords);
+    const commandResults = buildCommandResults(duplicateState, duplicateRecords);
 
     return {
       state: duplicateState,
@@ -126,12 +186,21 @@ export async function runJournaledCommandBatch(input: {
       events: links.events,
       metrics: links.metrics,
       financialTransactions: links.financialTransactions,
-      duplicate: true
+      duplicate: true,
+      batch: {
+        idempotencyKey: input.idempotencyKey,
+        failurePolicy,
+        status: "duplicate",
+        commandResults,
+        dependencyOrder: duplicateRecords.map((record) => record.commandId),
+        temporaryRefs: prepared.temporaryRefs,
+        rejectedCommands: []
+      }
     };
   }
 
   const createdAt = new Date().toISOString();
-  const receivedRecords = input.commands.map((command, index) =>
+  const receivedRecords = commands.map((command, index) =>
     createCommandRecord({
       seed: input.seed,
       command,
@@ -161,7 +230,8 @@ export async function runJournaledCommandBatch(input: {
           financialTransactionIds: [],
           metadata: {
             commandType: record.commandType,
-            status: record.status
+            status: record.status,
+            failurePolicy
           }
         })
       )
@@ -169,7 +239,11 @@ export async function runJournaledCommandBatch(input: {
   };
 
   try {
-    validatePlayerCommandsAgainstWorld(journaledState, input.commands);
+    if (!prepared.hasIntraBatchDependencies) {
+      validatePlayerCommandsAgainstWorld(journaledState, commands);
+    } else {
+      validatePreparedBatchShape(commands);
+    }
   } catch (error) {
     const rejectedState = finalizeCommandRecords(journaledState, receivedRecords, {
       seed: input.seed,
@@ -179,10 +253,7 @@ export async function runJournaledCommandBatch(input: {
       result: "rejected",
       tickApplied: null,
       rejectionCode: getErrorCode(error),
-      rejectionMessage: error instanceof Error ? error.message : "Command validation failed.",
-      events: [],
-      metrics: [],
-      financialTransactions: []
+      rejectionMessage: error instanceof Error ? error.message : "Command validation failed."
     });
     await input.store.saveWorld(rejectedState);
     throw error;
@@ -194,7 +265,11 @@ export async function runJournaledCommandBatch(input: {
     actionType: input.actionType,
     status: "validated",
     result: "validated",
-    metadata: { validation: "backend-world-validation" }
+    metadata: {
+      validation: prepared.hasIntraBatchDependencies ? "backend-batch-reference-validation" : "backend-world-validation",
+      failurePolicy,
+      dependencyOrder: prepared.dependencyOrder.join(",")
+    }
   });
 
   let tickResult: TickResult;
@@ -202,7 +277,7 @@ export async function runJournaledCommandBatch(input: {
   try {
     tickResult = runTick({
       state: journaledState,
-      commands: input.commands,
+      commands,
       seed: input.seed
     });
   } catch (error) {
@@ -214,76 +289,189 @@ export async function runJournaledCommandBatch(input: {
       result: "failed",
       tickApplied: null,
       rejectionCode: getErrorCode(error),
-      rejectionMessage: error instanceof Error ? error.message : "Command execution failed.",
-      events: [],
-      metrics: [],
-      financialTransactions: []
+      rejectionMessage: error instanceof Error ? error.message : "Command execution failed."
     });
     await input.store.saveWorld(failedState);
     throw error;
   }
 
-  if (tickResult.rejectedCommands.length > 0) {
-    const rejectedState = finalizeCommandRecords(tickResult.state, receivedRecords, {
+  const acceptedRecords = receivedRecords.filter((record) => tickResult.acceptedCommands.includes(record.commandId));
+  const rejectedRecords = receivedRecords.filter((record) => tickResult.rejectedCommands.some((rejection) => rejection.commandId === record.commandId));
+
+  if (tickResult.rejectedCommands.length > 0 && failurePolicy === "all_or_nothing") {
+    const rejectedState = finalizeCommandRecords(journaledState, receivedRecords, {
       seed: input.seed,
       session: input.session,
       actionType: input.actionType,
       status: "rejected",
       result: "rejected",
-      tickApplied: tickResult.state.currentTick,
-      rejectionCode: tickResult.rejectedCommands[0]?.code ?? "COMMAND_REJECTED",
-      rejectionMessage: tickResult.rejectedCommands[0]?.message ?? "Simulation rejected the command.",
-      events: tickResult.events,
-      metrics: tickResult.metrics,
-      financialTransactions: tickResult.state.financialTransactions
+      tickApplied: null,
+      rejectionCode: tickResult.rejectedCommands[0]?.code ?? "COMMAND_BATCH_REJECTED",
+      rejectionMessage: tickResult.rejectedCommands[0]?.message ?? "Simulation rejected the batch; all commands were rolled back."
     });
     await input.store.saveWorld(rejectedState);
-    throw badRequest("COMMAND_REJECTED", "One or more commands were rejected by simulation validation.", {
-      rejectedCommands: tickResult.rejectedCommands
+
+    throw badRequest("COMMAND_BATCH_REJECTED", "One or more commands were rejected; all_or_nothing batch was rolled back.", {
+      failurePolicy,
+      rejectedCommands: tickResult.rejectedCommands,
+      dependencyOrder: prepared.dependencyOrder
     });
   }
 
-  const acceptedState = markCommandRecords(tickResult.state, receivedRecords, {
-    seed: input.seed,
-    session: input.session,
-    actionType: input.actionType,
-    status: "accepted",
-    result: "accepted",
-    metadata: {
-      validation: "simulation-core-accepted",
-      acceptedCommandCount: tickResult.acceptedCommands.length
-    }
-  });
+  let finalState = tickResult.state;
 
-  const appliedState = finalizeCommandRecords(acceptedState, receivedRecords, {
-    seed: input.seed,
-    session: input.session,
-    actionType: input.actionType,
-    status: "applied",
-    result: "applied",
-    tickApplied: tickResult.state.currentTick,
-    rejectionCode: null,
-    rejectionMessage: null,
-    events: tickResult.events,
-    metrics: tickResult.metrics,
-    financialTransactions: tickResult.state.financialTransactions
-  });
-  await input.store.saveWorld(appliedState);
+  if (acceptedRecords.length > 0) {
+    finalState = markCommandRecords(finalState, acceptedRecords, {
+      seed: input.seed,
+      session: input.session,
+      actionType: input.actionType,
+      status: "accepted",
+      result: "accepted",
+      metadata: {
+        validation: "simulation-core-accepted",
+        acceptedCommandCount: tickResult.acceptedCommands.length,
+        failurePolicy
+      }
+    });
+    finalState = finalizeCommandRecords(finalState, acceptedRecords, {
+      seed: input.seed,
+      session: input.session,
+      actionType: input.actionType,
+      status: "applied",
+      result: "applied",
+      tickApplied: tickResult.state.currentTick,
+      rejectionCode: null,
+      rejectionMessage: null
+    });
+  }
 
-  const finalRecords = appliedState.playerCommands.filter((record) => receivedRecords.some((created) => created.id === record.id));
-  const links = collectRecordsLinks(appliedState, finalRecords);
+  if (rejectedRecords.length > 0) {
+    finalState = finalizeRejectedCommandRecords(finalState, rejectedRecords, tickResult.rejectedCommands, {
+      seed: input.seed,
+      session: input.session,
+      actionType: input.actionType,
+      tickApplied: tickResult.state.currentTick
+    });
+  }
+
+  await input.store.saveWorld(finalState);
+
+  const finalRecords = finalState.playerCommands.filter((record) => receivedRecords.some((created) => created.id === record.id));
+  const links = collectRecordsLinks(finalState, finalRecords);
+  const commandResults = buildCommandResults(finalState, finalRecords);
+  const batchStatus: JournaledCommandBatchSummary["status"] = rejectedRecords.length > 0 ? "partial" : "applied";
 
   return {
-    state: appliedState,
+    state: finalState,
     tickResult: {
       ...tickResult,
-      state: appliedState
+      state: finalState
     },
     commandRecords: finalRecords,
     events: links.events,
     metrics: links.metrics,
     financialTransactions: links.financialTransactions,
-    duplicate: false
+    duplicate: false,
+    batch: {
+      idempotencyKey: input.idempotencyKey,
+      failurePolicy,
+      status: batchStatus,
+      commandResults,
+      dependencyOrder: prepared.dependencyOrder,
+      temporaryRefs: prepared.temporaryRefs,
+      rejectedCommands: tickResult.rejectedCommands
+    }
+  };
+}
+
+export function prepareDependentCommandBatch(input: {
+  readonly state: WorldState;
+  readonly commands: readonly PlayerCommand[];
+  readonly seed: string;
+}): PreparedCommandBatch {
+  const commandById = new Map<string, PlayerCommand>();
+  const producerByTemporaryRef = new Map<string, PlayerCommand>();
+  const scheduledTick = input.state.currentTick + 1;
+  const initialTemporaryRefs: Record<string, string> = {};
+
+  for (const command of input.commands) {
+    if (commandById.has(command.commandId)) {
+      throw badRequest("DUPLICATE_COMMAND_ID", "Command batch contains duplicate commandId values.", { commandId: command.commandId });
+    }
+
+    commandById.set(command.commandId, command);
+
+    if (command.temporaryRef) {
+      assertTemporaryRef(command.temporaryRef);
+      const aliases = predictCommandResultAliases({ command, seed: input.seed, scheduledTick });
+
+      for (const temporaryRef of Object.keys(aliases)) {
+        if (producerByTemporaryRef.has(temporaryRef)) {
+          throw badRequest("DUPLICATE_TEMPORARY_REF", "Command batch contains duplicate temporaryRef values.", {
+            temporaryRef
+          });
+        }
+
+        producerByTemporaryRef.set(temporaryRef, command);
+        initialTemporaryRefs[temporaryRef] = aliases[temporaryRef];
+      }
+    }
+  }
+
+  const dependenciesByCommandId = new Map<string, Set<string>>();
+
+  for (const command of input.commands) {
+    const dependencies = new Set<string>();
+
+    for (const dependency of command.dependsOn ?? []) {
+      const producer = producerByTemporaryRef.get(dependency) ?? commandById.get(dependency);
+
+      if (!producer) {
+        throw badRequest("UNKNOWN_BATCH_DEPENDENCY", "Command batch dependency does not point to a commandId or temporaryRef in the same batch.", {
+          commandId: command.commandId,
+          dependency
+        });
+      }
+
+      if (producer.commandId !== command.commandId) {
+        dependencies.add(producer.commandId);
+      }
+    }
+
+    for (const reference of collectTemporaryReferences(command)) {
+      const producer = producerByTemporaryRef.get(reference);
+
+      if (!producer) {
+        throw badRequest("UNKNOWN_TEMPORARY_REFERENCE", "Command uses a temporary reference that is not produced in this batch.", {
+          commandId: command.commandId,
+          reference
+        });
+      }
+
+      if (producer.commandId !== command.commandId) {
+        dependencies.add(producer.commandId);
+      }
+    }
+
+    dependenciesByCommandId.set(command.commandId, dependencies);
+  }
+
+  const orderedCommandIds = topologicalSort(input.commands.map((command) => command.commandId), dependenciesByCommandId);
+  const orderedCommands = orderedCommandIds.map((commandId) => commandById.get(commandId)).filter((command): command is PlayerCommand => Boolean(command));
+  const resolvedTemporaryRefs: Record<string, string> = { ...initialTemporaryRefs };
+  const resolvedCommands: PlayerCommand[] = [];
+
+  for (const command of orderedCommands) {
+    const resolvedCommand = resolveCommandReferences(command, resolvedTemporaryRefs);
+    resolvedCommands.push(resolvedCommand);
+    Object.assign(resolvedTemporaryRefs, predictCommandResultAliases({ command: resolvedCommand, seed: input.seed, scheduledTick }));
+  }
+
+  return {
+    commands: resolvedCommands,
+    dependencyOrder: orderedCommandIds,
+    temporaryRefs: resolvedTemporaryRefs,
+    hasIntraBatchDependencies: Array.from(dependenciesByCommandId.values()).some((dependencies) => dependencies.size > 0)
   };
 }
 
@@ -379,9 +567,6 @@ function finalizeCommandRecords(
     readonly tickApplied: number | null;
     readonly rejectionCode: string | null;
     readonly rejectionMessage: string | null;
-    readonly events: readonly DomainEvent[];
-    readonly metrics: readonly Metric[];
-    readonly financialTransactions: readonly FinancialTransaction[];
   }
 ): WorldState {
   const updatedAt = new Date().toISOString();
@@ -438,6 +623,36 @@ function finalizeCommandRecords(
       )
     ]
   };
+}
+
+function finalizeRejectedCommandRecords(
+  state: WorldState,
+  records: readonly PlayerCommandRecord[],
+  rejectedCommands: readonly RejectedCommand[],
+  input: {
+    readonly seed: string;
+    readonly session: AuthenticatedPlayerSession;
+    readonly actionType: string;
+    readonly tickApplied: number;
+  }
+): WorldState {
+  let nextState = state;
+
+  for (const record of records) {
+    const rejection = rejectedCommands.find((candidate) => candidate.commandId === record.commandId) ?? null;
+    nextState = finalizeCommandRecords(nextState, [record], {
+      seed: input.seed,
+      session: input.session,
+      actionType: input.actionType,
+      status: "rejected",
+      result: "rejected",
+      tickApplied: input.tickApplied,
+      rejectionCode: rejection?.code ?? "COMMAND_REJECTED",
+      rejectionMessage: rejection?.message ?? "Simulation rejected the command."
+    });
+  }
+
+  return nextState;
 }
 
 function appendAuditLog(
@@ -515,6 +730,37 @@ function createAuditLog(input: {
   };
 }
 
+function buildCommandResults(state: WorldState, records: readonly PlayerCommandRecord[]): readonly CommandExecutionResult[] {
+  return records.map((record) => {
+    const linkedEvents = state.events.filter((event) => record.resultEventIds.includes(event.id));
+    const companyEvent = linkedEvents.find((event) => event.type === "CompanyRegisteredEvent") ?? null;
+    const premiseEvent = linkedEvents.find((event) => event.type === "LandPremiseAcquiredEvent") ?? null;
+    const purchaseEvent = linkedEvents.find((event) => event.type === "ResourcePurchasedEvent") ?? null;
+    const productionEvent = linkedEvents.find((event) => event.type === "ManualProductionRunEvent") ?? null;
+    const priceEvent = linkedEvents.find((event) => event.type === "RetailPriceChangedEvent") ?? null;
+
+    return {
+      commandId: record.commandId,
+      commandType: record.commandType,
+      status: record.status,
+      idempotencyKey: record.idempotencyKey,
+      temporaryRef: record.command.temporaryRef ?? null,
+      rejectionCode: record.rejectionCode,
+      rejectionMessage: record.rejectionMessage,
+      createdCompanyId: readMetadataString(companyEvent, "companyId"),
+      warehouseId: readMetadataString(premiseEvent, "warehouseId"),
+      productionPlanId: readMetadataString(premiseEvent, "productionPlanId"),
+      retailOfferId: readMetadataString(premiseEvent, "retailOfferId"),
+      resourcePurchaseId: readMetadataString(purchaseEvent, "purchaseId"),
+      productionRunId: readMetadataString(productionEvent, "productionRunId"),
+      retailPriceChangeId: readMetadataString(priceEvent, "priceChangeId"),
+      eventIds: record.resultEventIds,
+      metricIds: record.resultMetricIds,
+      financialTransactionIds: record.resultFinancialTransactionIds
+    };
+  });
+}
+
 function collectCommandLinks(
   state: WorldState,
   command: PlayerCommand
@@ -572,8 +818,179 @@ function findCommandByIdempotencyKey(state: WorldState, playerId: string, idempo
   return (state.playerCommands ?? []).find((record) => record.playerId === playerId && record.idempotencyKey === idempotencyKey) ?? null;
 }
 
+function validatePreparedBatchShape(commands: readonly PlayerCommand[]): void {
+  if (commands.length === 0) {
+    return;
+  }
+
+  for (const command of commands) {
+    if (command.commandId.trim().length === 0) {
+      throw badRequest("INVALID_COMMAND_ID", "Command batch contains an empty commandId.", { commandType: command.type });
+    }
+
+    if (command.type === "CreateCompanyCommand" && command.name.trim().length < 2) {
+      throw badRequest("INVALID_COMPANY_NAME", "CreateCompanyCommand in batch has an invalid company name.", { commandId: command.commandId });
+    }
+  }
+}
+
+function collectTemporaryReferences(command: PlayerCommand): readonly string[] {
+  const candidates: string[] = [];
+
+  if (command.type === "BuyLandCommand") {
+    candidates.push(command.companyId);
+  }
+
+  if (command.type === "BuyResourceCommand") {
+    candidates.push(command.buyerCompanyId, command.buyerWarehouseId ?? "");
+  }
+
+  if (command.type === "RunManualProductionCommand") {
+    candidates.push(command.companyId, command.productionPlanId);
+  }
+
+  if (command.type === "SetRetailPriceCommand") {
+    candidates.push(command.companyId);
+  }
+
+  return candidates.filter(isTemporaryRef);
+}
+
+function resolveCommandReferences(command: PlayerCommand, refs: Readonly<Record<string, string>>): PlayerCommand {
+  if (command.type === "BuyLandCommand") {
+    return { ...command, companyId: resolveMaybeRef(command.companyId, refs) };
+  }
+
+  if (command.type === "BuyResourceCommand") {
+    return {
+      ...command,
+      buyerCompanyId: resolveMaybeRef(command.buyerCompanyId, refs),
+      buyerWarehouseId: command.buyerWarehouseId ? resolveMaybeRef(command.buyerWarehouseId, refs) : undefined
+    };
+  }
+
+  if (command.type === "RunManualProductionCommand") {
+    return {
+      ...command,
+      companyId: resolveMaybeRef(command.companyId, refs),
+      productionPlanId: resolveMaybeRef(command.productionPlanId, refs)
+    };
+  }
+
+  if (command.type === "SetRetailPriceCommand") {
+    return { ...command, companyId: resolveMaybeRef(command.companyId, refs) };
+  }
+
+  return command;
+}
+
+function resolveMaybeRef(value: string, refs: Readonly<Record<string, string>>): string {
+  if (!isTemporaryRef(value)) {
+    return value;
+  }
+
+  const resolved = refs[value];
+
+  if (!resolved) {
+    throw badRequest("UNRESOLVED_TEMPORARY_REFERENCE", "Could not resolve temporary reference in command batch.", { reference: value });
+  }
+
+  return resolved;
+}
+
+function predictPrimaryCommandResultId(input: { readonly command: PlayerCommand; readonly seed: string; readonly scheduledTick: number }): string {
+  const aliases = predictCommandResultAliases(input);
+  const firstAlias = input.command.temporaryRef ? aliases[input.command.temporaryRef] : null;
+
+  if (firstAlias) {
+    return firstAlias;
+  }
+
+  if (input.command.type === "CreateCompanyCommand") {
+    return `${input.seed}-company-${input.scheduledTick}-${slugify(input.command.name.trim())}`;
+  }
+
+  return input.command.commandId;
+}
+
+function predictCommandResultAliases(input: { readonly command: PlayerCommand; readonly seed: string; readonly scheduledTick: number }): Record<string, string> {
+  const refs: Record<string, string> = {};
+  const temporaryRef = input.command.temporaryRef;
+
+  if (input.command.type === "CreateCompanyCommand") {
+    const companyId = `${input.seed}-company-${input.scheduledTick}-${slugify(input.command.name.trim())}`;
+
+    if (temporaryRef) {
+      refs[temporaryRef] = companyId;
+      refs[`${temporaryRef}:company`] = companyId;
+    }
+
+    return refs;
+  }
+
+  if (input.command.type === "BuyLandCommand") {
+    const warehouseId = `${input.seed}-warehouse-${input.scheduledTick}-${input.command.companyId}-starter`;
+    const productionPlanId = `${input.seed}-production-${input.scheduledTick}-${input.command.companyId}-bread`;
+    const retailOfferId = `${input.seed}-offer-${input.scheduledTick}-${input.command.companyId}-bread`;
+
+    if (temporaryRef) {
+      refs[temporaryRef] = warehouseId;
+      refs[`${temporaryRef}:warehouse`] = warehouseId;
+      refs[`${temporaryRef}:productionPlan`] = productionPlanId;
+      refs[`${temporaryRef}:retailOffer`] = retailOfferId;
+    }
+
+    return refs;
+  }
+
+  if (input.command.type === "BuyResourceCommand" && temporaryRef) {
+    refs[temporaryRef] = `${input.seed}-resource-purchase-${input.scheduledTick}-${input.command.commandId}`;
+  }
+
+  if (input.command.type === "RunManualProductionCommand" && temporaryRef) {
+    refs[temporaryRef] = `${input.seed}-production-run-${input.scheduledTick}-${input.command.commandId}`;
+  }
+
+  return refs;
+}
+
+function topologicalSort(commandIds: readonly string[], dependenciesByCommandId: ReadonlyMap<string, ReadonlySet<string>>): readonly string[] {
+  const result: string[] = [];
+  const remaining = new Set(commandIds);
+
+  while (remaining.size > 0) {
+    const ready = [...remaining].find((commandId) => [...(dependenciesByCommandId.get(commandId) ?? new Set())].every((dependency) => result.includes(dependency)));
+
+    if (!ready) {
+      throw badRequest("COMMAND_BATCH_DEPENDENCY_CYCLE", "Command batch has a circular or unsatisfied dependency graph.", {
+        remaining: [...remaining].join(",")
+      });
+    }
+
+    result.push(ready);
+    remaining.delete(ready);
+  }
+
+  return result;
+}
+
+function assertTemporaryRef(value: string): void {
+  if (!isTemporaryRef(value)) {
+    throw badRequest("INVALID_TEMPORARY_REF", "Temporary references must start with '$' and include an entity namespace.", { temporaryRef: value });
+  }
+}
+
+function isTemporaryRef(value: string): boolean {
+  return /^\$[a-z][a-z0-9-]*:[a-z0-9][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$/i.test(value.trim());
+}
+
 function commandScopedIdempotencyKey(key: string, index: number, count: number): string {
   return count === 1 ? key : `${key}:${index + 1}`;
+}
+
+function readMetadataString(event: DomainEvent | null, key: string): string | null {
+  const value = event?.metadata[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function readHeader(request: FastifyRequest, name: string): string | null {
