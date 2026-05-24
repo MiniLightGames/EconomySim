@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { type WorldStore } from "./store";
+import type { WorldStore } from "./store";
 export interface RouteDependencies {
     readonly store: WorldStore;
     readonly seed: string;

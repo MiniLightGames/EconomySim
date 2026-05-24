@@ -22,7 +22,8 @@ exports.ECONOMY_INVARIANTS = [
     "Important world changes must produce explainable causes, impacts, metrics, and news.",
     "Private company finances stay hidden unless the company is publicly listed.",
     "Public statistics carry reliability and manipulation-risk metadata.",
-    "Important actions create audit log records, events, and metrics."
+    "Important actions create audit log records, events, and metrics.",
+    "Player command records link idempotency keys to resulting events, metrics, and financial transactions."
 ];
 function createInitialWorldState(seed = "demo") {
     const createdAt = "2026-01-01T00:00:00.000Z";
@@ -1871,6 +1872,8 @@ function createInitialWorldState(seed = "demo") {
                 updatedTick: 0
             }
         ],
+        playerCommands: [],
+        auditLogs: [],
         events: [
             {
                 id: `${seed}-event-world-seeded`,
@@ -1955,6 +1958,8 @@ function summarizeWorld(state) {
         forecasts: (state.forecasts ?? []).length,
         publicStatistics: (state.publicStatistics ?? []).length,
         hiddenStatistics: (state.hiddenStatistics ?? []).length,
+        playerCommands: (state.playerCommands ?? []).length,
+        auditLogs: (state.auditLogs ?? []).length,
         warehouses: state.warehouses.length,
         shipments: state.shipments.length,
         logisticsRoutes: state.logisticsRoutes.length,
@@ -1970,3 +1975,4 @@ function summarizeWorld(state) {
         populationTotal: state.cities.reduce((total, city) => total + city.populationTotal, 0)
     };
 }
+//# sourceMappingURL=index.js.map

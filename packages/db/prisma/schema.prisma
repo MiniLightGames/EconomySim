@@ -1842,6 +1842,34 @@ model HiddenStatistic {
   @@index([metricName])
 }
 
+model PlayerCommandRecord {
+  id                               String   @id
+  commandId                        String   @unique
+  idempotencyKey                   String
+  status                           String
+  commandType                      String
+  command                          Json
+  userId                           String
+  playerId                         String
+  tickReceived                     Int
+  tickScheduled                    Int
+  tickApplied                      Int?
+  resultEventIds                   Json
+  resultMetricIds                  Json
+  resultFinancialTransactionIds    Json
+  affectedEntityIds                Json
+  rejectionCode                    String?
+  rejectionMessage                 String?
+  createdAt                        DateTime
+  updatedAt                        DateTime
+
+  @@unique([playerId, idempotencyKey])
+  @@index([status])
+  @@index([commandType])
+  @@index([tickScheduled])
+  @@index([tickApplied])
+}
+
 model LedgerAccount {
   id           String        @id @default(cuid())
   ownerType    String
@@ -1877,20 +1905,28 @@ model LedgerEntry {
 }
 
 model AuditLog {
-  id                    String             @id @default(cuid())
-  userId                String?
-  playerId              String?
-  actionType            String
-  payloadHash           String
-  ipDevice              String?
-  tick                  Int
-  result                String
-  affectedEntities      Json
-  ledgerTransactionId   String?
-  ledgerTransaction     LedgerTransaction? @relation(fields: [ledgerTransactionId], references: [id])
-  createdAt             DateTime           @default(now())
+  id                         String             @id @default(cuid())
+  userId                     String?
+  playerId                   String?
+  actionType                 String
+  commandId                  String?
+  idempotencyKey             String?
+  payloadHash                String
+  ipDevice                   String?
+  tick                       Int
+  result                     String
+  affectedEntities           Json
+  eventIds                   Json?
+  metricIds                  Json?
+  financialTransactionIds    Json?
+  metadata                   Json?
+  ledgerTransactionId        String?
+  ledgerTransaction          LedgerTransaction? @relation(fields: [ledgerTransactionId], references: [id])
+  createdAt                  DateTime           @default(now())
 
   @@index([playerId])
+  @@index([commandId])
+  @@index([idempotencyKey])
   @@index([actionType])
   @@index([tick])
 }

@@ -73,6 +73,8 @@ export type EventCauseType =
   | "corruption"
   | "ecology";
 export type DataReliabilityGrade = "high" | "medium" | "low" | "manipulated";
+export type PlayerCommandRecordStatus = "received" | "validated" | "accepted" | "rejected" | "applied" | "failed";
+export type AuditLogResult = "received" | "validated" | "accepted" | "rejected" | "applied" | "failed" | "duplicate";
 
 export interface GeoPoint {
   readonly lat: number;
@@ -1350,6 +1352,45 @@ export interface Metric {
   readonly tags: Readonly<Record<string, string>>;
 }
 
+export interface PlayerCommandRecord {
+  readonly id: EntityId;
+  readonly commandId: EntityId;
+  readonly idempotencyKey: string;
+  readonly status: PlayerCommandRecordStatus;
+  readonly commandType: PlayerCommand["type"];
+  readonly command: PlayerCommand;
+  readonly userId: EntityId;
+  readonly playerId: EntityId;
+  readonly tickReceived: number;
+  readonly tickScheduled: number;
+  readonly tickApplied: number | null;
+  readonly resultEventIds: readonly EntityId[];
+  readonly resultMetricIds: readonly EntityId[];
+  readonly resultFinancialTransactionIds: readonly EntityId[];
+  readonly affectedEntityIds: readonly EntityId[];
+  readonly rejectionCode: string | null;
+  readonly rejectionMessage: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface AuditLog {
+  readonly id: EntityId;
+  readonly tick: number;
+  readonly userId: EntityId | null;
+  readonly playerId: EntityId | null;
+  readonly actionType: string;
+  readonly commandId: EntityId | null;
+  readonly idempotencyKey: string | null;
+  readonly result: AuditLogResult;
+  readonly affectedEntityIds: readonly EntityId[];
+  readonly eventIds: readonly EntityId[];
+  readonly metricIds: readonly EntityId[];
+  readonly financialTransactionIds: readonly EntityId[];
+  readonly metadata: Readonly<Record<string, string | number | boolean | null>>;
+  readonly createdAt: string;
+}
+
 export interface Snapshot {
   readonly id: EntityId;
   readonly tick: number;
@@ -1457,6 +1498,8 @@ export interface WorldState {
   readonly publicStatistics: readonly PublicStatistic[];
   readonly hiddenStatistics: readonly HiddenStatistic[];
   readonly dataReliability: readonly DataReliability[];
+  readonly playerCommands: readonly PlayerCommandRecord[];
+  readonly auditLogs: readonly AuditLog[];
   readonly events: readonly DomainEvent[];
   readonly metrics: readonly Metric[];
   readonly snapshots: readonly Snapshot[];
@@ -1531,7 +1574,8 @@ export const ECONOMY_INVARIANTS = [
   "Important world changes must produce explainable causes, impacts, metrics, and news.",
   "Private company finances stay hidden unless the company is publicly listed.",
   "Public statistics carry reliability and manipulation-risk metadata.",
-  "Important actions create audit log records, events, and metrics."
+  "Important actions create audit log records, events, and metrics.",
+  "Player command records link idempotency keys to resulting events, metrics, and financial transactions."
 ] as const;
 
 export function createInitialWorldState(seed = "demo"): WorldState {
@@ -3382,6 +3426,8 @@ export function createInitialWorldState(seed = "demo"): WorldState {
         updatedTick: 0
       }
     ],
+    playerCommands: [],
+    auditLogs: [],
     events: [
       {
         id: `${seed}-event-world-seeded`,
@@ -3467,6 +3513,8 @@ export function summarizeWorld(state: WorldState) {
     forecasts: (state.forecasts ?? []).length,
     publicStatistics: (state.publicStatistics ?? []).length,
     hiddenStatistics: (state.hiddenStatistics ?? []).length,
+    playerCommands: (state.playerCommands ?? []).length,
+    auditLogs: (state.auditLogs ?? []).length,
     warehouses: state.warehouses.length,
     shipments: state.shipments.length,
     logisticsRoutes: state.logisticsRoutes.length,

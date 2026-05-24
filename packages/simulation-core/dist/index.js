@@ -7436,6 +7436,23 @@ function normalizeWorldState(state) {
             manipulationRisk: clamp(reliability.manipulationRisk, 0, 1),
             updatedTick: sanitizeQuantity(reliability.updatedTick)
         })),
+        playerCommands: (state.playerCommands ?? []).map((record) => ({
+            ...record,
+            tickReceived: sanitizeQuantity(record.tickReceived),
+            tickScheduled: sanitizeQuantity(record.tickScheduled),
+            tickApplied: record.tickApplied === null ? null : sanitizeQuantity(record.tickApplied),
+            resultEventIds: record.resultEventIds ?? [],
+            resultMetricIds: record.resultMetricIds ?? [],
+            resultFinancialTransactionIds: record.resultFinancialTransactionIds ?? [],
+            affectedEntityIds: record.affectedEntityIds ?? []
+        })),
+        auditLogs: (state.auditLogs ?? []).map((record) => ({
+            ...record,
+            eventIds: record.eventIds ?? [],
+            metricIds: record.metricIds ?? [],
+            financialTransactionIds: record.financialTransactionIds ?? [],
+            affectedEntityIds: record.affectedEntityIds ?? []
+        })),
         cities: state.cities.map((city) => ({
             ...city,
             populationTotal: sanitizeQuantity(city.populationTotal),
@@ -8078,3 +8095,4 @@ function average(values) {
     }
     return values.reduce((total, value) => total + value, 0) / values.length;
 }
+//# sourceMappingURL=index.js.map

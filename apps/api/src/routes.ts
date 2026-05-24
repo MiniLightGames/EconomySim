@@ -9,7 +9,6 @@ import {
   payLoan,
   placeOrder,
   runMediaCampaign,
-  runTick,
   startResearchProject
 } from "@economysim/simulation-core";
 import type { FastifyInstance } from "fastify";
@@ -35,8 +34,8 @@ import {
   voteBodySchema
 } from "./schemas";
 import type { WorldStore } from "./store";
-import { validatePlayerCommandsAgainstWorld } from "./validation";
 import { bindCommandToSession, resolvePlayerSession } from "./auth";
+import { resolveIdempotencyKey, runJournaledCommand, runJournaledCommandBatch } from "./command-journal";
 
 export interface RouteDependencies {
   readonly store: WorldStore;
@@ -185,18 +184,27 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
     const body = createCompanyBodySchema.parse(request.body);
     const session = resolvePlayerSession(request);
     const state = await store.loadWorld();
+    const idempotencyKey = resolveIdempotencyKey(request, "CreateCompanyCommand");
     const command: PlayerCommand = bindCommandToSession(
       {
         type: "CreateCompanyCommand" as const,
-        commandId: makeCommandId(seed, state.currentTick, "create-company"),
+        commandId: makeCommandId(seed, state.currentTick, "create-company", idempotencyKey),
         countryId: body.countryId,
         name: body.name
       },
       session
     ) as PlayerCommand;
-    const result = runValidatedCommand(state, command, seed);
-    const companyId = getEventMetadataString(result.events, "CompanyRegisteredEvent", "companyId");
-    const company = result.state.companies.find((candidate) => candidate.id === companyId);
+    const execution = await runJournaledCommand({
+      store,
+      state,
+      command,
+      session,
+      seed,
+      idempotencyKey,
+      actionType: "CreateCompanyCommand"
+    });
+    const companyId = getEventMetadataString(execution.events, "CompanyRegisteredEvent", "companyId");
+    const company = execution.state.companies.find((candidate) => candidate.id === companyId);
 
     if (!company) {
       throw badRequest("COMPANY_COMMAND_DID_NOT_CREATE_ENTITY", "CreateCompanyCommand was accepted but no company entity was created.", {
@@ -204,19 +212,18 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
       });
     }
 
-    await store.saveWorld(result.state);
-
-    return reply.status(201).send(company);
+    return reply.status(execution.duplicate ? 200 : 201).send(company);
   });
 
   app.post("/land/purchase", async (request, reply) => {
     const body = landPurchaseBodySchema.parse(request.body);
     const session = resolvePlayerSession(request);
     const state = await store.loadWorld();
+    const idempotencyKey = resolveIdempotencyKey(request, "BuyLandCommand");
     const command: PlayerCommand = bindCommandToSession(
       {
         type: "BuyLandCommand" as const,
-        commandId: makeCommandId(seed, state.currentTick, "buy-land"),
+        commandId: makeCommandId(seed, state.currentTick, "buy-land", idempotencyKey),
         companyId: body.companyId,
         cityId: body.cityId,
         lotId: body.lotId ?? `${body.cityId}-starter-premise`,
@@ -224,18 +231,25 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
       },
       session
     ) as PlayerCommand;
-    const result = runValidatedCommand(state, command, seed);
-    const warehouseId = getEventMetadataString(result.events, "LandPremiseAcquiredEvent", "warehouseId");
-    const productionPlanId = getEventMetadataString(result.events, "LandPremiseAcquiredEvent", "productionPlanId");
-    const retailOfferId = getEventMetadataString(result.events, "LandPremiseAcquiredEvent", "retailOfferId");
+    const execution = await runJournaledCommand({
+      store,
+      state,
+      command,
+      session,
+      seed,
+      idempotencyKey,
+      actionType: "BuyLandCommand"
+    });
+    const warehouseId = getEventMetadataString(execution.events, "LandPremiseAcquiredEvent", "warehouseId");
+    const productionPlanId = getEventMetadataString(execution.events, "LandPremiseAcquiredEvent", "productionPlanId");
+    const retailOfferId = getEventMetadataString(execution.events, "LandPremiseAcquiredEvent", "retailOfferId");
 
-    await store.saveWorld(result.state);
-
-    return reply.status(201).send({
-      warehouse: result.state.warehouses.find((candidate) => candidate.id === warehouseId) ?? null,
-      productionPlan: result.state.productionPlans.find((candidate) => candidate.id === productionPlanId) ?? null,
-      retailOffer: result.state.retailOffers.find((candidate) => candidate.id === retailOfferId) ?? null,
-      event: result.events.find((event) => event.type === "LandPremiseAcquiredEvent") ?? null
+    return reply.status(execution.duplicate ? 200 : 201).send({
+      warehouse: execution.state.warehouses.find((candidate) => candidate.id === warehouseId) ?? null,
+      productionPlan: execution.state.productionPlans.find((candidate) => candidate.id === productionPlanId) ?? null,
+      retailOffer: execution.state.retailOffers.find((candidate) => candidate.id === retailOfferId) ?? null,
+      event: execution.events.find((event) => event.type === "LandPremiseAcquiredEvent") ?? null,
+      commandRecord: execution.commandRecords[0] ?? null
     });
   });
 
@@ -282,7 +296,7 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
     const command: PlayerCommand = bindCommandToSession(
       {
         type: "SetRetailPriceCommand" as const,
-        commandId: makeCommandId(seed, state.currentTick, "set-retail-price"),
+        commandId: `${seed}-cmd-pending-set-retail-price`,
         companyId: body.companyId,
         productId: offer.productId,
         priceMinor: body.priceMinor,
@@ -292,22 +306,34 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
     ) as PlayerCommand;
 
     try {
-      const result = runValidatedCommand(state, command, seed);
-      const updatedOffer = result.state.retailOffers.find((candidate) => candidate.id === id);
-      const priceChange = [...result.state.retailPriceChanges].reverse().find((change) => change.retailOfferId === id) ?? null;
+      const idempotencyKey = resolveIdempotencyKey(request, "SetRetailPriceCommand");
+      const journaledCommand: PlayerCommand = {
+        ...command,
+        commandId: makeCommandId(seed, state.currentTick, "set-retail-price", idempotencyKey)
+      };
+      const execution = await runJournaledCommand({
+        store,
+        state,
+        command: journaledCommand,
+        session,
+        seed,
+        idempotencyKey,
+        actionType: "SetRetailPriceCommand"
+      });
+      const updatedOffer = execution.state.retailOffers.find((candidate) => candidate.id === id);
+      const priceChange = [...execution.state.retailPriceChanges].reverse().find((change) => change.retailOfferId === id) ?? null;
 
       if (!updatedOffer || !priceChange) {
         throw badRequest("RETAIL_PRICE_COMMAND_DID_NOT_UPDATE_ENTITY", "SetRetailPriceCommand was accepted but no price change was recorded.", {
-          commandId: command.commandId,
+          commandId: journaledCommand.commandId,
           retailOfferId: id
         });
       }
 
-      await store.saveWorld(result.state);
-
       return reply.status(200).send({
-        offer: toRetailOfferDto(updatedOffer, result.state),
-        priceChange
+        offer: toRetailOfferDto(updatedOffer, execution.state),
+        priceChange,
+        commandRecord: execution.commandRecords[0] ?? null
       });
     } catch (error) {
       throw mapOperationsError(error);
@@ -345,18 +371,27 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
     const body = resourcePurchaseBodySchema.parse(request.body);
     const session = resolvePlayerSession(request);
     const state = await store.loadWorld();
+    const idempotencyKey = resolveIdempotencyKey(request, "BuyResourceCommand");
     const command: PlayerCommand = bindCommandToSession(
       {
         type: "BuyResourceCommand" as const,
-        commandId: makeCommandId(seed, state.currentTick, "buy-resource"),
+        commandId: makeCommandId(seed, state.currentTick, "buy-resource", idempotencyKey),
         ...body
       },
       session
     ) as PlayerCommand;
 
     try {
-      const result = runValidatedCommand(state, command, seed);
-      const purchase = result.state.resourcePurchases.find((candidate) => candidate.id === `${seed}-resource-purchase-${result.state.currentTick}-${command.commandId}`);
+      const execution = await runJournaledCommand({
+        store,
+        state,
+        command,
+        session,
+        seed,
+        idempotencyKey,
+        actionType: "BuyResourceCommand"
+      });
+      const purchase = execution.state.resourcePurchases.find((candidate) => candidate.id === `${seed}-resource-purchase-${execution.state.currentTick}-${command.commandId}`);
 
       if (!purchase) {
         throw badRequest("RESOURCE_COMMAND_DID_NOT_RECORD_PURCHASE", "BuyResourceCommand was accepted but no purchase was recorded.", {
@@ -364,9 +399,7 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
         });
       }
 
-      await store.saveWorld(result.state);
-
-      return reply.status(201).send(purchase);
+      return reply.status(execution.duplicate ? 200 : 201).send({ ...purchase, commandRecord: execution.commandRecords[0] ?? null });
     } catch (error) {
       throw mapOperationsError(error);
     }
@@ -386,19 +419,28 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
     const body = manualProductionBodySchema.parse(request.body);
     const session = resolvePlayerSession(request);
     const state = await store.loadWorld();
+    const idempotencyKey = resolveIdempotencyKey(request, "RunManualProductionCommand");
     const command: PlayerCommand = bindCommandToSession(
       {
         type: "RunManualProductionCommand" as const,
-        commandId: makeCommandId(seed, state.currentTick, "run-production"),
+        commandId: makeCommandId(seed, state.currentTick, "run-production", idempotencyKey),
         ...body
       },
       session
     ) as PlayerCommand;
 
     try {
-      const result = runValidatedCommand(state, command, seed);
-      const productionRun = result.state.manualProductionRuns.find(
-        (candidate) => candidate.id === `${seed}-production-run-${result.state.currentTick}-${command.commandId}`
+      const execution = await runJournaledCommand({
+        store,
+        state,
+        command,
+        session,
+        seed,
+        idempotencyKey,
+        actionType: "RunManualProductionCommand"
+      });
+      const productionRun = execution.state.manualProductionRuns.find(
+        (candidate) => candidate.id === `${seed}-production-run-${execution.state.currentTick}-${command.commandId}`
       );
 
       if (!productionRun) {
@@ -407,9 +449,7 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
         });
       }
 
-      await store.saveWorld(result.state);
-
-      return reply.status(201).send(productionRun);
+      return reply.status(execution.duplicate ? 200 : 201).send({ ...productionRun, commandRecord: execution.commandRecords[0] ?? null });
     } catch (error) {
       throw mapOperationsError(error);
     }
@@ -836,32 +876,48 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
   app.post("/simulation/tick", async (request) => {
     const body = simulationTickBodySchema.parse(request.body ?? {});
     const session = resolvePlayerSession(request);
-    const commands = body.commands.map((command) => bindCommandToSession(command, session) as PlayerCommand);
+    const commands = body.commands.map((command: PlayerCommand) => bindCommandToSession(command, session) as PlayerCommand);
     const state = await store.loadWorld();
-
-    validatePlayerCommandsAgainstWorld(state, commands);
-
-    const result = runTick({
-      state,
-      commands,
-      seed
-    });
-
-    if (result.rejectedCommands.length > 0) {
-      throw badRequest("COMMAND_REJECTED", "One or more commands were rejected by simulation validation.", {
-        rejectedCommands: result.rejectedCommands
-      });
-    }
-
-    await store.saveWorld(result.state);
+    const execution = commands.length > 0
+      ? await runJournaledCommandBatch({
+          store,
+          state,
+          commands,
+          session,
+          seed,
+          idempotencyKey: resolveIdempotencyKey(request, "SimulationTickCommandBatch"),
+          actionType: "SimulationTickCommandBatch"
+        })
+      : await runJournaledCommandBatch({
+          store,
+          state,
+          commands: [],
+          session,
+          seed,
+          idempotencyKey: `${seed}-tick-${state.currentTick + 1}`,
+          actionType: "WorldTick"
+        });
+    const result = execution.tickResult;
 
     return {
-      summary: summarizeWorld(result.state),
-      acceptedCommands: result.acceptedCommands,
-      events: result.events,
-      metrics: result.metrics,
-      news: result.state.news.filter((item) => item.tick === result.state.currentTick)
+      summary: summarizeWorld(execution.state),
+      acceptedCommands: result?.acceptedCommands ?? execution.commandRecords.map((record) => record.commandId),
+      commandRecords: execution.commandRecords,
+      duplicate: execution.duplicate,
+      events: execution.events,
+      metrics: execution.metrics,
+      news: execution.state.news.filter((item) => item.tick === execution.state.currentTick)
     };
+  });
+
+  app.get("/commands", async () => {
+    const state = await store.loadWorld();
+    return state.playerCommands ?? [];
+  });
+
+  app.get("/audit-logs", async () => {
+    const state = await store.loadWorld();
+    return state.auditLogs ?? [];
   });
 
   app.get("/news", async () => {
@@ -875,26 +931,18 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
   });
 }
 
-function runValidatedCommand(state: WorldState, command: PlayerCommand, seed: string) {
-  validatePlayerCommandsAgainstWorld(state, [command]);
-
-  const result = runTick({
-    state,
-    commands: [command],
-    seed
-  });
-
-  if (result.rejectedCommands.length > 0) {
-    throw badRequest("COMMAND_REJECTED", "The player command was rejected by simulation validation.", {
-      rejectedCommands: result.rejectedCommands
-    });
-  }
-
-  return result;
+function makeCommandId(seed: string, currentTick: number, action: string, idempotencyKey: string): string {
+  return `${seed}-cmd-${currentTick + 1}-${action}-${slugify(idempotencyKey)}`;
 }
 
-function makeCommandId(seed: string, currentTick: number, action: string): string {
-  return `${seed}-cmd-${currentTick + 1}-${action}`;
+function slugify(value: string): string {
+  const slug = value
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+  return slug.length > 0 ? slug : "item";
 }
 
 function getEventMetadataString(events: readonly { readonly type: string; readonly metadata: Readonly<Record<string, string | number | boolean>> }[], type: string, key: string): string | null {

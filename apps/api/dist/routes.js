@@ -6,8 +6,8 @@ const simulation_core_1 = require("@economysim/simulation-core");
 const market_1 = require("./market");
 const errors_1 = require("./errors");
 const schemas_1 = require("./schemas");
-const store_1 = require("./store");
-const validation_1 = require("./validation");
+const auth_1 = require("./auth");
+const command_journal_1 = require("./command-journal");
 async function registerRoutes(app, dependencies) {
     const { store, seed } = dependencies;
     app.get("/health", async () => {
@@ -119,10 +119,65 @@ async function registerRoutes(app, dependencies) {
     });
     app.post("/companies", async (request, reply) => {
         const body = schemas_1.createCompanyBodySchema.parse(request.body);
+        const session = (0, auth_1.resolvePlayerSession)(request);
         const state = await store.loadWorld();
-        const result = (0, store_1.addCompanyToWorld)(state, body);
-        await store.saveWorld(result.state);
-        return reply.status(201).send(result.company);
+        const idempotencyKey = (0, command_journal_1.resolveIdempotencyKey)(request, "CreateCompanyCommand");
+        const command = (0, auth_1.bindCommandToSession)({
+            type: "CreateCompanyCommand",
+            commandId: makeCommandId(seed, state.currentTick, "create-company", idempotencyKey),
+            countryId: body.countryId,
+            name: body.name
+        }, session);
+        const execution = await (0, command_journal_1.runJournaledCommand)({
+            store,
+            state,
+            command,
+            session,
+            seed,
+            idempotencyKey,
+            actionType: "CreateCompanyCommand"
+        });
+        const companyId = getEventMetadataString(execution.events, "CompanyRegisteredEvent", "companyId");
+        const company = execution.state.companies.find((candidate) => candidate.id === companyId);
+        if (!company) {
+            throw (0, errors_1.badRequest)("COMPANY_COMMAND_DID_NOT_CREATE_ENTITY", "CreateCompanyCommand was accepted but no company entity was created.", {
+                commandId: command.commandId
+            });
+        }
+        return reply.status(execution.duplicate ? 200 : 201).send(company);
+    });
+    app.post("/land/purchase", async (request, reply) => {
+        const body = schemas_1.landPurchaseBodySchema.parse(request.body);
+        const session = (0, auth_1.resolvePlayerSession)(request);
+        const state = await store.loadWorld();
+        const idempotencyKey = (0, command_journal_1.resolveIdempotencyKey)(request, "BuyLandCommand");
+        const command = (0, auth_1.bindCommandToSession)({
+            type: "BuyLandCommand",
+            commandId: makeCommandId(seed, state.currentTick, "buy-land", idempotencyKey),
+            companyId: body.companyId,
+            cityId: body.cityId,
+            lotId: body.lotId ?? `${body.cityId}-starter-premise`,
+            mode: body.mode
+        }, session);
+        const execution = await (0, command_journal_1.runJournaledCommand)({
+            store,
+            state,
+            command,
+            session,
+            seed,
+            idempotencyKey,
+            actionType: "BuyLandCommand"
+        });
+        const warehouseId = getEventMetadataString(execution.events, "LandPremiseAcquiredEvent", "warehouseId");
+        const productionPlanId = getEventMetadataString(execution.events, "LandPremiseAcquiredEvent", "productionPlanId");
+        const retailOfferId = getEventMetadataString(execution.events, "LandPremiseAcquiredEvent", "retailOfferId");
+        return reply.status(execution.duplicate ? 200 : 201).send({
+            warehouse: execution.state.warehouses.find((candidate) => candidate.id === warehouseId) ?? null,
+            productionPlan: execution.state.productionPlans.find((candidate) => candidate.id === productionPlanId) ?? null,
+            retailOffer: execution.state.retailOffers.find((candidate) => candidate.id === retailOfferId) ?? null,
+            event: execution.events.find((event) => event.type === "LandPremiseAcquiredEvent") ?? null,
+            commandRecord: execution.commandRecords[0] ?? null
+        });
     });
     app.get("/markets", async () => {
         const state = await store.loadWorld();
@@ -149,16 +204,48 @@ async function registerRoutes(app, dependencies) {
     app.post("/retail/offers/:id/price", async (request, reply) => {
         const { id } = schemas_1.idParamsSchema.parse(request.params);
         const body = schemas_1.retailPriceBodySchema.parse(request.body);
+        const session = (0, auth_1.resolvePlayerSession)(request);
         const state = await store.loadWorld();
+        const offer = state.retailOffers.find((candidate) => candidate.id === id);
+        if (!offer || !offer.active) {
+            throw (0, errors_1.badRequest)("UNKNOWN_RETAIL_OFFER", "Retail price cannot be set without an active company offer.", { retailOfferId: id });
+        }
+        const company = state.companies.find((candidate) => candidate.id === body.companyId);
+        const command = (0, auth_1.bindCommandToSession)({
+            type: "SetRetailPriceCommand",
+            commandId: `${seed}-cmd-pending-set-retail-price`,
+            companyId: body.companyId,
+            productId: offer.productId,
+            priceMinor: body.priceMinor,
+            currencyCode: body.currencyCode ?? company?.currencyCode ?? "NCR"
+        }, session);
         try {
-            const result = (0, simulation_core_1.setRetailOfferPrice)(state, {
-                ...body,
-                retailOfferId: id
-            }, seed);
-            await store.saveWorld(result.state);
+            const idempotencyKey = (0, command_journal_1.resolveIdempotencyKey)(request, "SetRetailPriceCommand");
+            const journaledCommand = {
+                ...command,
+                commandId: makeCommandId(seed, state.currentTick, "set-retail-price", idempotencyKey)
+            };
+            const execution = await (0, command_journal_1.runJournaledCommand)({
+                store,
+                state,
+                command: journaledCommand,
+                session,
+                seed,
+                idempotencyKey,
+                actionType: "SetRetailPriceCommand"
+            });
+            const updatedOffer = execution.state.retailOffers.find((candidate) => candidate.id === id);
+            const priceChange = [...execution.state.retailPriceChanges].reverse().find((change) => change.retailOfferId === id) ?? null;
+            if (!updatedOffer || !priceChange) {
+                throw (0, errors_1.badRequest)("RETAIL_PRICE_COMMAND_DID_NOT_UPDATE_ENTITY", "SetRetailPriceCommand was accepted but no price change was recorded.", {
+                    commandId: journaledCommand.commandId,
+                    retailOfferId: id
+                });
+            }
             return reply.status(200).send({
-                offer: toRetailOfferDto(result.retailOffer, result.state),
-                priceChange: result.priceChange
+                offer: toRetailOfferDto(updatedOffer, execution.state),
+                priceChange,
+                commandRecord: execution.commandRecords[0] ?? null
             });
         }
         catch (error) {
@@ -190,11 +277,31 @@ async function registerRoutes(app, dependencies) {
     });
     app.post("/resources/purchase", async (request, reply) => {
         const body = schemas_1.resourcePurchaseBodySchema.parse(request.body);
+        const session = (0, auth_1.resolvePlayerSession)(request);
         const state = await store.loadWorld();
+        const idempotencyKey = (0, command_journal_1.resolveIdempotencyKey)(request, "BuyResourceCommand");
+        const command = (0, auth_1.bindCommandToSession)({
+            type: "BuyResourceCommand",
+            commandId: makeCommandId(seed, state.currentTick, "buy-resource", idempotencyKey),
+            ...body
+        }, session);
         try {
-            const result = (0, simulation_core_1.buyResource)(state, body, seed);
-            await store.saveWorld(result.state);
-            return reply.status(201).send(result.purchase);
+            const execution = await (0, command_journal_1.runJournaledCommand)({
+                store,
+                state,
+                command,
+                session,
+                seed,
+                idempotencyKey,
+                actionType: "BuyResourceCommand"
+            });
+            const purchase = execution.state.resourcePurchases.find((candidate) => candidate.id === `${seed}-resource-purchase-${execution.state.currentTick}-${command.commandId}`);
+            if (!purchase) {
+                throw (0, errors_1.badRequest)("RESOURCE_COMMAND_DID_NOT_RECORD_PURCHASE", "BuyResourceCommand was accepted but no purchase was recorded.", {
+                    commandId: command.commandId
+                });
+            }
+            return reply.status(execution.duplicate ? 200 : 201).send({ ...purchase, commandRecord: execution.commandRecords[0] ?? null });
         }
         catch (error) {
             throw mapOperationsError(error);
@@ -210,11 +317,31 @@ async function registerRoutes(app, dependencies) {
     });
     app.post("/production/run", async (request, reply) => {
         const body = schemas_1.manualProductionBodySchema.parse(request.body);
+        const session = (0, auth_1.resolvePlayerSession)(request);
         const state = await store.loadWorld();
+        const idempotencyKey = (0, command_journal_1.resolveIdempotencyKey)(request, "RunManualProductionCommand");
+        const command = (0, auth_1.bindCommandToSession)({
+            type: "RunManualProductionCommand",
+            commandId: makeCommandId(seed, state.currentTick, "run-production", idempotencyKey),
+            ...body
+        }, session);
         try {
-            const result = (0, simulation_core_1.runManualProduction)(state, body, seed);
-            await store.saveWorld(result.state);
-            return reply.status(201).send(result.productionRun);
+            const execution = await (0, command_journal_1.runJournaledCommand)({
+                store,
+                state,
+                command,
+                session,
+                seed,
+                idempotencyKey,
+                actionType: "RunManualProductionCommand"
+            });
+            const productionRun = execution.state.manualProductionRuns.find((candidate) => candidate.id === `${seed}-production-run-${execution.state.currentTick}-${command.commandId}`);
+            if (!productionRun) {
+                throw (0, errors_1.badRequest)("PRODUCTION_COMMAND_DID_NOT_RECORD_RUN", "RunManualProductionCommand was accepted but no production run was recorded.", {
+                    commandId: command.commandId
+                });
+            }
+            return reply.status(execution.duplicate ? 200 : 201).send({ ...productionRun, commandRecord: execution.commandRecords[0] ?? null });
         }
         catch (error) {
             throw mapOperationsError(error);
@@ -527,9 +654,10 @@ async function registerRoutes(app, dependencies) {
     });
     app.post("/lobbying", async (request, reply) => {
         const body = schemas_1.lobbyingBodySchema.parse(request.body);
+        const session = (0, auth_1.resolvePlayerSession)(request);
         const state = await store.loadWorld();
         try {
-            const result = (0, simulation_core_1.fundLobbying)(state, body, seed);
+            const result = (0, simulation_core_1.fundLobbying)(state, { ...body, playerId: session.playerId }, seed);
             await store.saveWorld(result.state);
             return reply.status(201).send(result.action);
         }
@@ -539,9 +667,10 @@ async function registerRoutes(app, dependencies) {
     });
     app.post("/media-campaigns", async (request, reply) => {
         const body = schemas_1.mediaCampaignBodySchema.parse(request.body);
+        const session = (0, auth_1.resolvePlayerSession)(request);
         const state = await store.loadWorld();
         try {
-            const result = (0, simulation_core_1.runMediaCampaign)(state, body, seed);
+            const result = (0, simulation_core_1.runMediaCampaign)(state, { ...body, playerId: session.playerId }, seed);
             await store.saveWorld(result.state);
             return reply.status(201).send(result.influence);
         }
@@ -551,9 +680,10 @@ async function registerRoutes(app, dependencies) {
     });
     app.post("/vote", async (request) => {
         const body = schemas_1.voteBodySchema.parse(request.body);
+        const session = (0, auth_1.resolvePlayerSession)(request);
         const state = await store.loadWorld();
         try {
-            const result = (0, simulation_core_1.castVote)(state, body, seed);
+            const result = (0, simulation_core_1.castVote)(state, { ...body, playerId: session.playerId }, seed);
             await store.saveWorld(result.state);
             return result.election;
         }
@@ -563,26 +693,46 @@ async function registerRoutes(app, dependencies) {
     });
     app.post("/simulation/tick", async (request) => {
         const body = schemas_1.simulationTickBodySchema.parse(request.body ?? {});
+        const session = (0, auth_1.resolvePlayerSession)(request);
+        const commands = body.commands.map((command) => (0, auth_1.bindCommandToSession)(command, session));
         const state = await store.loadWorld();
-        (0, validation_1.validatePlayerCommandsAgainstWorld)(state, body.commands);
-        const result = (0, simulation_core_1.runTick)({
-            state,
-            commands: body.commands,
-            seed
-        });
-        if (result.rejectedCommands.length > 0) {
-            throw (0, errors_1.badRequest)("COMMAND_REJECTED", "One or more commands were rejected by simulation validation.", {
-                rejectedCommands: result.rejectedCommands
+        const execution = commands.length > 0
+            ? await (0, command_journal_1.runJournaledCommandBatch)({
+                store,
+                state,
+                commands,
+                session,
+                seed,
+                idempotencyKey: (0, command_journal_1.resolveIdempotencyKey)(request, "SimulationTickCommandBatch"),
+                actionType: "SimulationTickCommandBatch"
+            })
+            : await (0, command_journal_1.runJournaledCommandBatch)({
+                store,
+                state,
+                commands: [],
+                session,
+                seed,
+                idempotencyKey: `${seed}-tick-${state.currentTick + 1}`,
+                actionType: "WorldTick"
             });
-        }
-        await store.saveWorld(result.state);
+        const result = execution.tickResult;
         return {
-            summary: (0, domain_1.summarizeWorld)(result.state),
-            acceptedCommands: result.acceptedCommands,
-            events: result.events,
-            metrics: result.metrics,
-            news: result.state.news.filter((item) => item.tick === result.state.currentTick)
+            summary: (0, domain_1.summarizeWorld)(execution.state),
+            acceptedCommands: result?.acceptedCommands ?? execution.commandRecords.map((record) => record.commandId),
+            commandRecords: execution.commandRecords,
+            duplicate: execution.duplicate,
+            events: execution.events,
+            metrics: execution.metrics,
+            news: execution.state.news.filter((item) => item.tick === execution.state.currentTick)
         };
+    });
+    app.get("/commands", async () => {
+        const state = await store.loadWorld();
+        return state.playerCommands ?? [];
+    });
+    app.get("/audit-logs", async () => {
+        const state = await store.loadWorld();
+        return state.auditLogs ?? [];
     });
     app.get("/news", async () => {
         const state = await store.loadWorld();
@@ -592,6 +742,21 @@ async function registerRoutes(app, dependencies) {
         const state = await store.loadWorld();
         return state.metrics;
     });
+}
+function makeCommandId(seed, currentTick, action, idempotencyKey) {
+    return `${seed}-cmd-${currentTick + 1}-${action}-${slugify(idempotencyKey)}`;
+}
+function slugify(value) {
+    const slug = value
+        .toLocaleLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80);
+    return slug.length > 0 ? slug : "item";
+}
+function getEventMetadataString(events, type, key) {
+    const value = events.find((event) => event.type === type)?.metadata[key];
+    return typeof value === "string" && value.length > 0 ? value : null;
 }
 function toPublicWorldState(state) {
     return {
@@ -698,6 +863,16 @@ function mapOperationsError(error) {
         "INSUFFICIENT_RESOURCE_INVENTORY",
         "PLAYER_ACCOUNT_NOT_FOUND",
         "INSUFFICIENT_PLAYER_BALANCE",
+        "COMPANY_NAME_TAKEN",
+        "INVALID_COMPANY_NAME",
+        "UNKNOWN_COUNTRY",
+        "UNKNOWN_CITY",
+        "CITY_COMPANY_COUNTRY_MISMATCH",
+        "COMPANY_PREMISE_ALREADY_EXISTS",
+        "COMPANY_COMMAND_DID_NOT_CREATE_ENTITY",
+        "RESOURCE_COMMAND_DID_NOT_RECORD_PURCHASE",
+        "PRODUCTION_COMMAND_DID_NOT_RECORD_RUN",
+        "RETAIL_PRICE_COMMAND_DID_NOT_UPDATE_ENTITY",
         "UNKNOWN_PRODUCTION_PLAN",
         "INVALID_PRODUCTION_QUANTITY",
         "PRODUCTION_WAREHOUSE_REQUIRED",
@@ -795,6 +970,16 @@ function mapGovernmentError(error) {
         "INVALID_POLITICAL_SPEND",
         "PLAYER_ACCOUNT_NOT_FOUND",
         "INSUFFICIENT_PLAYER_BALANCE",
+        "COMPANY_NAME_TAKEN",
+        "INVALID_COMPANY_NAME",
+        "UNKNOWN_COUNTRY",
+        "UNKNOWN_CITY",
+        "CITY_COMPANY_COUNTRY_MISMATCH",
+        "COMPANY_PREMISE_ALREADY_EXISTS",
+        "COMPANY_COMMAND_DID_NOT_CREATE_ENTITY",
+        "RESOURCE_COMMAND_DID_NOT_RECORD_PURCHASE",
+        "PRODUCTION_COMMAND_DID_NOT_RECORD_RUN",
+        "RETAIL_PRICE_COMMAND_DID_NOT_UPDATE_ENTITY",
         "INVALID_MEDIA_CAMPAIGN",
         "VOTER_HAS_NO_ASSETS",
         "NO_ACTIVE_ELECTION"

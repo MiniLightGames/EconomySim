@@ -20,10 +20,57 @@ function validatePlayerCommandsAgainstWorld(state, commands) {
             }
         }
         if (command.type === "BuyLandCommand") {
-            if (!state.cities.some((city) => city.id === command.cityId)) {
+            const city = state.cities.find((candidate) => candidate.id === command.cityId);
+            const company = state.companies.find((candidate) => candidate.id === command.companyId);
+            if (!city) {
                 throw (0, errors_1.badRequest)("UNKNOWN_CITY", "BuyLandCommand references an unknown city.", {
                     commandId: command.commandId,
                     cityId: command.cityId
+                });
+            }
+            if (!company || company.ownerType !== "player" || company.ownerId !== command.playerId || company.legalStatus !== "registered") {
+                throw (0, errors_1.badRequest)("PLAYER_COMPANY_REQUIRED", "BuyLandCommand can only acquire premises for a registered player company.", {
+                    commandId: command.commandId,
+                    companyId: command.companyId
+                });
+            }
+            if (city && city.countryId !== company?.countryId) {
+                throw (0, errors_1.badRequest)("CITY_COMPANY_COUNTRY_MISMATCH", "BuyLandCommand city must be in the company's country.", {
+                    commandId: command.commandId,
+                    cityId: command.cityId,
+                    companyId: command.companyId
+                });
+            }
+        }
+        if (command.type === "BuyResourceCommand") {
+            const company = state.companies.find((candidate) => candidate.id === command.buyerCompanyId);
+            const offer = state.resourceOffers.find((candidate) => candidate.id === command.resourceOfferId);
+            if (!company || company.ownerType !== "player" || company.ownerId !== command.playerId || company.legalStatus !== "registered") {
+                throw (0, errors_1.badRequest)("PLAYER_COMPANY_REQUIRED", "BuyResourceCommand can only buy for a registered player company.", {
+                    commandId: command.commandId,
+                    buyerCompanyId: command.buyerCompanyId
+                });
+            }
+            if (!offer || !offer.active) {
+                throw (0, errors_1.badRequest)("UNKNOWN_OR_INACTIVE_RESOURCE_OFFER", "BuyResourceCommand references no active resource offer.", {
+                    commandId: command.commandId,
+                    resourceOfferId: command.resourceOfferId
+                });
+            }
+        }
+        if (command.type === "RunManualProductionCommand") {
+            const company = state.companies.find((candidate) => candidate.id === command.companyId);
+            const plan = state.productionPlans.find((candidate) => candidate.id === command.productionPlanId && candidate.companyId === command.companyId);
+            if (!company || company.ownerType !== "player" || company.ownerId !== command.playerId || company.legalStatus !== "registered") {
+                throw (0, errors_1.badRequest)("PLAYER_COMPANY_REQUIRED", "RunManualProductionCommand requires a registered player company.", {
+                    commandId: command.commandId,
+                    companyId: command.companyId
+                });
+            }
+            if (!plan) {
+                throw (0, errors_1.badRequest)("UNKNOWN_PRODUCTION_PLAN", "RunManualProductionCommand references an unknown production plan.", {
+                    commandId: command.commandId,
+                    productionPlanId: command.productionPlanId
                 });
             }
         }

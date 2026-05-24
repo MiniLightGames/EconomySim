@@ -83,6 +83,7 @@ export interface PrismaClientLike {
   readonly manualProductionRun?: PrismaWriteDelegate;
   readonly retailPriceChange?: PrismaWriteDelegate;
   readonly financialTransaction?: PrismaWriteDelegate;
+  readonly playerCommandRecord?: PrismaWriteDelegate;
   readonly event?: PrismaWriteDelegate;
   readonly metric?: PrismaWriteDelegate;
   readonly auditLog?: PrismaWriteDelegate;
@@ -473,6 +474,92 @@ async function persistNormalizedWorldState(prisma: PrismaClientLike, state: Worl
       }
     });
   }
+
+  for (const command of state.playerCommands ?? []) {
+    await prisma.playerCommandRecord?.upsert?.({
+      where: { id: command.id },
+      update: {
+        commandId: command.commandId,
+        idempotencyKey: command.idempotencyKey,
+        status: command.status,
+        commandType: command.commandType,
+        command: command.command,
+        userId: command.userId,
+        playerId: command.playerId,
+        tickReceived: command.tickReceived,
+        tickScheduled: command.tickScheduled,
+        tickApplied: command.tickApplied,
+        resultEventIds: command.resultEventIds,
+        resultMetricIds: command.resultMetricIds,
+        resultFinancialTransactionIds: command.resultFinancialTransactionIds,
+        affectedEntityIds: command.affectedEntityIds,
+        rejectionCode: command.rejectionCode,
+        rejectionMessage: command.rejectionMessage,
+        createdAt: new Date(command.createdAt),
+        updatedAt: new Date(command.updatedAt)
+      },
+      create: {
+        id: command.id,
+        commandId: command.commandId,
+        idempotencyKey: command.idempotencyKey,
+        status: command.status,
+        commandType: command.commandType,
+        command: command.command,
+        userId: command.userId,
+        playerId: command.playerId,
+        tickReceived: command.tickReceived,
+        tickScheduled: command.tickScheduled,
+        tickApplied: command.tickApplied,
+        resultEventIds: command.resultEventIds,
+        resultMetricIds: command.resultMetricIds,
+        resultFinancialTransactionIds: command.resultFinancialTransactionIds,
+        affectedEntityIds: command.affectedEntityIds,
+        rejectionCode: command.rejectionCode,
+        rejectionMessage: command.rejectionMessage,
+        createdAt: new Date(command.createdAt),
+        updatedAt: new Date(command.updatedAt)
+      }
+    });
+  }
+
+  for (const auditLog of state.auditLogs ?? []) {
+    await prisma.auditLog?.upsert?.({
+      where: { id: auditLog.id },
+      update: {
+        userId: auditLog.userId,
+        playerId: auditLog.playerId,
+        actionType: auditLog.actionType,
+        commandId: auditLog.commandId,
+        idempotencyKey: auditLog.idempotencyKey,
+        payloadHash: `${auditLog.actionType}:${auditLog.commandId ?? auditLog.id}:${auditLog.result}`,
+        tick: auditLog.tick,
+        result: auditLog.result,
+        affectedEntities: auditLog.affectedEntityIds,
+        eventIds: auditLog.eventIds,
+        metricIds: auditLog.metricIds,
+        financialTransactionIds: auditLog.financialTransactionIds,
+        metadata: auditLog.metadata,
+        createdAt: new Date(auditLog.createdAt)
+      },
+      create: {
+        id: auditLog.id,
+        userId: auditLog.userId,
+        playerId: auditLog.playerId,
+        actionType: auditLog.actionType,
+        commandId: auditLog.commandId,
+        idempotencyKey: auditLog.idempotencyKey,
+        payloadHash: `${auditLog.actionType}:${auditLog.commandId ?? auditLog.id}:${auditLog.result}`,
+        tick: auditLog.tick,
+        result: auditLog.result,
+        affectedEntities: auditLog.affectedEntityIds,
+        eventIds: auditLog.eventIds,
+        metricIds: auditLog.metricIds,
+        financialTransactionIds: auditLog.financialTransactionIds,
+        metadata: auditLog.metadata,
+        createdAt: new Date(auditLog.createdAt)
+      }
+    });
+  }
 }
 
 function upgradeWorldState(state: WorldState, seed: string): WorldState {
@@ -480,6 +567,8 @@ function upgradeWorldState(state: WorldState, seed: string): WorldState {
   const resourceOffers = state.resourceOffers ?? [];
   const resourcePurchases = state.resourcePurchases ?? [];
   const manualProductionRuns = state.manualProductionRuns ?? [];
+  const playerCommands = state.playerCommands ?? [];
+  const auditLogs = state.auditLogs ?? [];
   const wheat = state.products.find((product) => product.name.toLocaleLowerCase() === "wheat") ?? null;
   const grainfordWarehouse =
     state.warehouses.find(
@@ -513,7 +602,9 @@ function upgradeWorldState(state: WorldState, seed: string): WorldState {
     retailPriceChanges,
     resourceOffers: upgradedResourceOffers,
     resourcePurchases,
-    manualProductionRuns
+    manualProductionRuns,
+    playerCommands,
+    auditLogs
   };
 }
 

@@ -50,3 +50,6 @@ ADR-XXXX-short-name.md
 - `P1-TASK-20260524-0028-real-auth-rbac-session.md`
 - `P1-TASK-20260524-0029-command-batch-dependencies.md`
 - `P1-TASK-20260524-0030-browser-e2e-command-player-loop.md`
+- `P1-TASK-20260524-0031-command-journal-idempotency-audit.md`
+- `P1-TASK-20260524-0032-player-resource-logistics-delivery-loop.md`
+- `P1-TASK-20260524-0033-player-margin-accounting.md`

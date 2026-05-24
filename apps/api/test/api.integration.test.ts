@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApi } from "../src/server";
 import { InMemoryWorldStore } from "../src/store";
 
+function idem(key: string): Record<string, string> {
+  return { "Idempotency-Key": key };
+}
+
 describe("Fastify API integration", () => {
   let app: FastifyInstance;
 
@@ -61,6 +65,7 @@ describe("Fastify API integration", () => {
     const response = await app.inject({
       method: "POST",
       url: "/companies",
+      headers: idem("test-create-company"),
       payload: {
         playerId: "player-1",
         countryId: "api-test-country-north-coast",
@@ -80,10 +85,60 @@ describe("Fastify API integration", () => {
     expect(companiesResponse.json()).toHaveLength(6);
   });
 
+  it("records player commands, enforces idempotency, and writes audit logs", async () => {
+    const payload = {
+      playerId: "forged-player",
+      countryId: "api-test-country-north-coast",
+      name: "Idempotent Foods"
+    };
+    const firstResponse = await app.inject({
+      method: "POST",
+      url: "/companies",
+      headers: idem("idempotent-company-create"),
+      payload
+    });
+    const duplicateResponse = await app.inject({
+      method: "POST",
+      url: "/companies",
+      headers: idem("idempotent-company-create"),
+      payload
+    });
+    const commandsResponse = await app.inject({ method: "GET", url: "/commands" });
+    const auditResponse = await app.inject({ method: "GET", url: "/audit-logs" });
+    const companiesResponse = await app.inject({ method: "GET", url: "/companies" });
+    const companies = companiesResponse.json().filter((company: { name: string }) => company.name === "Idempotent Foods");
+
+    expect(firstResponse.statusCode).toBe(201);
+    expect(duplicateResponse.statusCode).toBe(200);
+    expect(companies).toHaveLength(1);
+    expect(commandsResponse.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          idempotencyKey: "idempotent-company-create",
+          status: "applied",
+          commandType: "CreateCompanyCommand",
+          playerId: "player-1",
+          resultEventIds: expect.arrayContaining([expect.stringContaining("company-registered")]),
+          resultMetricIds: expect.arrayContaining([expect.stringContaining("company-created")])
+        })
+      ])
+    );
+    expect(auditResponse.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ result: "received", idempotencyKey: "idempotent-company-create" }),
+        expect.objectContaining({ result: "validated", idempotencyKey: "idempotent-company-create" }),
+        expect.objectContaining({ result: "accepted", idempotencyKey: "idempotent-company-create" }),
+        expect.objectContaining({ result: "applied", idempotencyKey: "idempotent-company-create" }),
+        expect.objectContaining({ result: "duplicate", idempotencyKey: "idempotent-company-create" })
+      ])
+    );
+  });
+
   it("runs the player resource purchase and production vertical slice", async () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/companies",
+      headers: idem("vertical-create-company"),
       payload: {
         playerId: "player-1",
         countryId: "api-test-country-north-coast",
@@ -91,12 +146,25 @@ describe("Fastify API integration", () => {
       }
     });
     const company = createResponse.json();
+    const landResponse = await app.inject({
+      method: "POST",
+      url: "/land/purchase",
+      headers: idem("vertical-buy-land"),
+      payload: {
+        playerId: "player-1",
+        companyId: company.id,
+        cityId: "api-test-city-harborview",
+        lotId: "api-test-harborview-starter-premise",
+        mode: "lease"
+      }
+    });
     const warehousesResponse = await app.inject({ method: "GET", url: "/warehouses" });
-    const warehouse = warehousesResponse.json().find((candidate: { companyId: string }) => candidate.companyId === company.id);
+    const warehouse = landResponse.json().warehouse ?? warehousesResponse.json().find((candidate: { companyId: string }) => candidate.companyId === company.id);
     const offersResponse = await app.inject({ method: "GET", url: "/resources/offers" });
     const offer = offersResponse.json().find((candidate: { productId: string }) => candidate.productId === "api-test-product-wheat");
 
     expect(createResponse.statusCode).toBe(201);
+    expect(landResponse.statusCode).toBe(201);
     expect(warehouse).toBeDefined();
     expect(offersResponse.statusCode).toBe(200);
     expect(offer).toMatchObject({
@@ -107,6 +175,7 @@ describe("Fastify API integration", () => {
     const purchaseResponse = await app.inject({
       method: "POST",
       url: "/resources/purchase",
+      headers: idem("vertical-buy-wheat"),
       payload: {
         playerId: "player-1",
         buyerCompanyId: company.id,
@@ -121,6 +190,7 @@ describe("Fastify API integration", () => {
     const productionResponse = await app.inject({
       method: "POST",
       url: "/production/run",
+      headers: idem("vertical-run-production"),
       payload: {
         playerId: "player-1",
         companyId: company.id,
@@ -161,6 +231,7 @@ describe("Fastify API integration", () => {
     const priceResponse = await app.inject({
       method: "POST",
       url: `/retail/offers/${retailOffer.id}/price`,
+      headers: idem("vertical-set-price"),
       payload: {
         playerId: "player-1",
         companyId: company.id,
@@ -212,6 +283,7 @@ describe("Fastify API integration", () => {
     const response = await app.inject({
       method: "POST",
       url: "/companies",
+      headers: idem("missing-country-create"),
       payload: {
         playerId: "player-1",
         countryId: "missing-country",
@@ -720,12 +792,14 @@ describe("Fastify API integration", () => {
     const response = await app.inject({
       method: "POST",
       url: "/simulation/tick",
+      headers: idem("invalid-command-batch"),
       payload: {
         commands: [
           {
             type: "BuyLandCommand",
             commandId: "cmd-1",
             playerId: "player-1",
+            companyId: "api-test-company-harbor-bakery",
             cityId: "missing-city",
             lotId: "lot-1"
           }

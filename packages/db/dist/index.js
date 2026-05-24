@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DB_INVARIANTS = void 0;
+exports.PERSISTENCE_CONTRACT_NOTES = exports.DB_INVARIANTS = void 0;
 exports.validateLedgerTransaction = validateLedgerTransaction;
 exports.assertLedgerTransactionBalanced = assertLedgerTransactionBalanced;
 exports.DB_INVARIANTS = [
@@ -33,4 +33,11 @@ function assertLedgerTransactionBalanced(transaction) {
         throw new Error(result.errors.join(" "));
     }
 }
+exports.PERSISTENCE_CONTRACT_NOTES = [
+    "Snapshots remain the rollback safety layer.",
+    "Companies, accounts, warehouses, production plans, offers, inventory lots, command records, audit logs, events, and metrics are durable normalized rows.",
+    "Every player command stores idempotency key, lifecycle status, and links to resulting events, metrics, and financial transactions.",
+    "All command writes must be executed inside a Prisma transaction boundary before the snapshot is appended.",
+    "Auth binds user -> session -> player on the backend; request bodies are not trusted for playerId."
+];
 //# sourceMappingURL=index.js.map

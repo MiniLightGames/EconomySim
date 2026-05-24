@@ -61,14 +61,23 @@ class PrismaWorldStore {
             ...state,
             snapshots: [...state.snapshots, snapshot]
         };
-        await this.prisma.snapshot.create({
-            data: {
-                id: snapshot.id,
-                tick: snapshot.tick,
-                stateHash: snapshot.stateHash,
-                payload: persistedState
-            }
+        await this.writeTransaction(async (tx) => {
+            await persistNormalizedWorldState(tx, persistedState);
+            await tx.snapshot.create({
+                data: {
+                    id: snapshot.id,
+                    tick: snapshot.tick,
+                    stateHash: snapshot.stateHash,
+                    payload: persistedState
+                }
+            });
         });
+    }
+    async writeTransaction(fn) {
+        if (this.prisma.$transaction) {
+            return this.prisma.$transaction(fn);
+        }
+        return fn(this.prisma);
     }
     async health() {
         try {
@@ -91,11 +100,389 @@ class PrismaWorldStore {
     }
 }
 exports.PrismaWorldStore = PrismaWorldStore;
+async function persistNormalizedWorldState(prisma, state) {
+    for (const company of state.companies) {
+        await prisma.company?.upsert?.({
+            where: { id: company.id },
+            update: {
+                ownerType: company.ownerType,
+                ownerId: company.ownerId,
+                countryId: company.countryId,
+                name: company.name,
+                legalStatus: company.legalStatus,
+                cashBalanceMinor: BigInt(company.cashBalanceMinor),
+                currencyCode: company.currencyCode,
+                reputation: company.reputation,
+                bankruptcyStatus: company.bankruptcyStatus
+            },
+            create: {
+                id: company.id,
+                ownerType: company.ownerType,
+                ownerId: company.ownerId,
+                countryId: company.countryId,
+                name: company.name,
+                legalStatus: company.legalStatus,
+                cashBalanceMinor: BigInt(company.cashBalanceMinor),
+                currencyCode: company.currencyCode,
+                reputation: company.reputation,
+                bankruptcyStatus: company.bankruptcyStatus
+            }
+        });
+    }
+    for (const account of state.bankAccounts) {
+        await prisma.bankAccount?.upsert?.({
+            where: { id: account.id },
+            update: {
+                bankId: account.bankId,
+                ownerType: account.ownerType,
+                ownerId: account.ownerId,
+                accountType: account.accountType,
+                currencyCode: account.currencyCode,
+                balanceMinor: BigInt(account.balanceMinor),
+                reservedMinor: BigInt(account.reservedMinor),
+                insured: account.insured,
+                status: account.status
+            },
+            create: {
+                id: account.id,
+                bankId: account.bankId,
+                ownerType: account.ownerType,
+                ownerId: account.ownerId,
+                accountType: account.accountType,
+                currencyCode: account.currencyCode,
+                balanceMinor: BigInt(account.balanceMinor),
+                reservedMinor: BigInt(account.reservedMinor),
+                insured: account.insured,
+                status: account.status
+            }
+        });
+    }
+    for (const score of state.creditScores) {
+        await prisma.creditScore?.upsert?.({
+            where: { id: score.id },
+            update: {
+                borrowerType: score.borrowerType,
+                borrowerId: score.borrowerId,
+                score: score.score,
+                probabilityOfDefault: score.probabilityOfDefault,
+                lastUpdatedTick: score.lastUpdatedTick
+            },
+            create: {
+                id: score.id,
+                borrowerType: score.borrowerType,
+                borrowerId: score.borrowerId,
+                score: score.score,
+                probabilityOfDefault: score.probabilityOfDefault,
+                lastUpdatedTick: score.lastUpdatedTick
+            }
+        });
+    }
+    for (const warehouse of state.warehouses) {
+        await prisma.warehouse?.upsert?.({
+            where: { id: warehouse.id },
+            update: {
+                companyId: warehouse.companyId,
+                cityId: warehouse.cityId,
+                name: warehouse.name,
+                warehouseType: warehouse.warehouseType,
+                capacity: warehouse.capacity,
+                handlingCostMinorPerUnit: warehouse.handlingCostMinorPerUnit
+            },
+            create: {
+                id: warehouse.id,
+                companyId: warehouse.companyId,
+                cityId: warehouse.cityId,
+                name: warehouse.name,
+                warehouseType: warehouse.warehouseType,
+                capacity: warehouse.capacity,
+                handlingCostMinorPerUnit: warehouse.handlingCostMinorPerUnit
+            }
+        });
+    }
+    for (const lot of state.inventoryLots) {
+        await prisma.inventoryLot?.upsert?.({
+            where: { id: lot.id },
+            update: {
+                warehouseId: lot.warehouseId,
+                productId: lot.productId,
+                quantity: lot.quantity,
+                quality: lot.quality
+            },
+            create: {
+                id: lot.id,
+                warehouseId: lot.warehouseId,
+                productId: lot.productId,
+                quantity: lot.quantity,
+                quality: lot.quality
+            }
+        });
+    }
+    for (const plan of state.productionPlans) {
+        await prisma.productionPlan?.upsert?.({
+            where: { id: plan.id },
+            update: {
+                companyId: plan.companyId,
+                warehouseId: plan.warehouseId,
+                outputProductId: plan.outputProductId,
+                outputQuantityPerTick: plan.outputQuantityPerTick,
+                inputs: plan.inputs,
+                active: plan.active
+            },
+            create: {
+                id: plan.id,
+                companyId: plan.companyId,
+                warehouseId: plan.warehouseId,
+                outputProductId: plan.outputProductId,
+                outputQuantityPerTick: plan.outputQuantityPerTick,
+                inputs: plan.inputs,
+                active: plan.active
+            }
+        });
+    }
+    for (const offer of state.retailOffers) {
+        await prisma.retailOffer?.upsert?.({
+            where: { id: offer.id },
+            update: {
+                companyId: offer.companyId,
+                warehouseId: offer.warehouseId,
+                productId: offer.productId,
+                priceMinor: offer.priceMinor,
+                quality: offer.quality,
+                active: offer.active
+            },
+            create: {
+                id: offer.id,
+                companyId: offer.companyId,
+                warehouseId: offer.warehouseId,
+                productId: offer.productId,
+                priceMinor: offer.priceMinor,
+                quality: offer.quality,
+                active: offer.active
+            }
+        });
+    }
+    for (const purchase of state.resourcePurchases) {
+        await prisma.resourcePurchase?.upsert?.({
+            where: { id: purchase.id },
+            update: {
+                tick: purchase.tick,
+                playerId: purchase.playerId,
+                buyerCompanyId: purchase.buyerCompanyId,
+                sellerCompanyId: purchase.sellerCompanyId,
+                sellerWarehouseId: purchase.sellerWarehouseId,
+                buyerWarehouseId: purchase.buyerWarehouseId,
+                productId: purchase.productId,
+                quantity: purchase.quantity,
+                unitPriceMinor: BigInt(purchase.unitPriceMinor),
+                totalPriceMinor: BigInt(purchase.totalPriceMinor),
+                quality: purchase.quality,
+                status: purchase.status
+            },
+            create: {
+                id: purchase.id,
+                tick: purchase.tick,
+                playerId: purchase.playerId,
+                buyerCompanyId: purchase.buyerCompanyId,
+                sellerCompanyId: purchase.sellerCompanyId,
+                sellerWarehouseId: purchase.sellerWarehouseId,
+                buyerWarehouseId: purchase.buyerWarehouseId,
+                productId: purchase.productId,
+                quantity: purchase.quantity,
+                unitPriceMinor: BigInt(purchase.unitPriceMinor),
+                totalPriceMinor: BigInt(purchase.totalPriceMinor),
+                quality: purchase.quality,
+                status: purchase.status
+            }
+        });
+    }
+    for (const run of state.manualProductionRuns) {
+        await prisma.manualProductionRun?.upsert?.({
+            where: { id: run.id },
+            update: {
+                tick: run.tick,
+                playerId: run.playerId,
+                companyId: run.companyId,
+                productionPlanId: run.productionPlanId,
+                warehouseId: run.warehouseId,
+                outputProductId: run.outputProductId,
+                requestedQuantity: run.requestedQuantity,
+                producedQuantity: run.producedQuantity,
+                inputConsumptions: run.inputConsumptions,
+                status: run.status
+            },
+            create: {
+                id: run.id,
+                tick: run.tick,
+                playerId: run.playerId,
+                companyId: run.companyId,
+                productionPlanId: run.productionPlanId,
+                warehouseId: run.warehouseId,
+                outputProductId: run.outputProductId,
+                requestedQuantity: run.requestedQuantity,
+                producedQuantity: run.producedQuantity,
+                inputConsumptions: run.inputConsumptions,
+                status: run.status
+            }
+        });
+    }
+    for (const change of state.retailPriceChanges) {
+        await prisma.retailPriceChange?.upsert?.({
+            where: { id: change.id },
+            update: {
+                tick: change.tick,
+                playerId: change.playerId,
+                companyId: change.companyId,
+                retailOfferId: change.retailOfferId,
+                productId: change.productId,
+                oldPriceMinor: BigInt(change.oldPriceMinor),
+                newPriceMinor: BigInt(change.newPriceMinor),
+                currencyCode: change.currencyCode,
+                status: change.status
+            },
+            create: {
+                id: change.id,
+                tick: change.tick,
+                playerId: change.playerId,
+                companyId: change.companyId,
+                retailOfferId: change.retailOfferId,
+                productId: change.productId,
+                oldPriceMinor: BigInt(change.oldPriceMinor),
+                newPriceMinor: BigInt(change.newPriceMinor),
+                currencyCode: change.currencyCode,
+                status: change.status
+            }
+        });
+    }
+    for (const event of state.events.slice(-100)) {
+        await prisma.event?.upsert?.({
+            where: { id: event.id },
+            update: {
+                tick: event.tick,
+                type: event.type,
+                message: event.message,
+                entityIds: event.entityIds,
+                metadata: event.metadata
+            },
+            create: {
+                id: event.id,
+                tick: event.tick,
+                type: event.type,
+                message: event.message,
+                entityIds: event.entityIds,
+                metadata: event.metadata
+            }
+        });
+    }
+    for (const metric of state.metrics.slice(-100)) {
+        await prisma.metric?.upsert?.({
+            where: { id: metric.id },
+            update: {
+                tick: metric.tick,
+                name: metric.name,
+                value: metric.value,
+                tags: metric.tags
+            },
+            create: {
+                id: metric.id,
+                tick: metric.tick,
+                name: metric.name,
+                value: metric.value,
+                tags: metric.tags
+            }
+        });
+    }
+    for (const command of state.playerCommands ?? []) {
+        await prisma.playerCommandRecord?.upsert?.({
+            where: { id: command.id },
+            update: {
+                commandId: command.commandId,
+                idempotencyKey: command.idempotencyKey,
+                status: command.status,
+                commandType: command.commandType,
+                command: command.command,
+                userId: command.userId,
+                playerId: command.playerId,
+                tickReceived: command.tickReceived,
+                tickScheduled: command.tickScheduled,
+                tickApplied: command.tickApplied,
+                resultEventIds: command.resultEventIds,
+                resultMetricIds: command.resultMetricIds,
+                resultFinancialTransactionIds: command.resultFinancialTransactionIds,
+                affectedEntityIds: command.affectedEntityIds,
+                rejectionCode: command.rejectionCode,
+                rejectionMessage: command.rejectionMessage,
+                createdAt: new Date(command.createdAt),
+                updatedAt: new Date(command.updatedAt)
+            },
+            create: {
+                id: command.id,
+                commandId: command.commandId,
+                idempotencyKey: command.idempotencyKey,
+                status: command.status,
+                commandType: command.commandType,
+                command: command.command,
+                userId: command.userId,
+                playerId: command.playerId,
+                tickReceived: command.tickReceived,
+                tickScheduled: command.tickScheduled,
+                tickApplied: command.tickApplied,
+                resultEventIds: command.resultEventIds,
+                resultMetricIds: command.resultMetricIds,
+                resultFinancialTransactionIds: command.resultFinancialTransactionIds,
+                affectedEntityIds: command.affectedEntityIds,
+                rejectionCode: command.rejectionCode,
+                rejectionMessage: command.rejectionMessage,
+                createdAt: new Date(command.createdAt),
+                updatedAt: new Date(command.updatedAt)
+            }
+        });
+    }
+    for (const auditLog of state.auditLogs ?? []) {
+        await prisma.auditLog?.upsert?.({
+            where: { id: auditLog.id },
+            update: {
+                userId: auditLog.userId,
+                playerId: auditLog.playerId,
+                actionType: auditLog.actionType,
+                commandId: auditLog.commandId,
+                idempotencyKey: auditLog.idempotencyKey,
+                payloadHash: `${auditLog.actionType}:${auditLog.commandId ?? auditLog.id}:${auditLog.result}`,
+                tick: auditLog.tick,
+                result: auditLog.result,
+                affectedEntities: auditLog.affectedEntityIds,
+                eventIds: auditLog.eventIds,
+                metricIds: auditLog.metricIds,
+                financialTransactionIds: auditLog.financialTransactionIds,
+                metadata: auditLog.metadata,
+                createdAt: new Date(auditLog.createdAt)
+            },
+            create: {
+                id: auditLog.id,
+                userId: auditLog.userId,
+                playerId: auditLog.playerId,
+                actionType: auditLog.actionType,
+                commandId: auditLog.commandId,
+                idempotencyKey: auditLog.idempotencyKey,
+                payloadHash: `${auditLog.actionType}:${auditLog.commandId ?? auditLog.id}:${auditLog.result}`,
+                tick: auditLog.tick,
+                result: auditLog.result,
+                affectedEntities: auditLog.affectedEntityIds,
+                eventIds: auditLog.eventIds,
+                metricIds: auditLog.metricIds,
+                financialTransactionIds: auditLog.financialTransactionIds,
+                metadata: auditLog.metadata,
+                createdAt: new Date(auditLog.createdAt)
+            }
+        });
+    }
+}
 function upgradeWorldState(state, seed) {
     const retailPriceChanges = state.retailPriceChanges ?? [];
     const resourceOffers = state.resourceOffers ?? [];
     const resourcePurchases = state.resourcePurchases ?? [];
     const manualProductionRuns = state.manualProductionRuns ?? [];
+    const playerCommands = state.playerCommands ?? [];
+    const auditLogs = state.auditLogs ?? [];
     const wheat = state.products.find((product) => product.name.toLocaleLowerCase() === "wheat") ?? null;
     const grainfordWarehouse = state.warehouses.find((warehouse) => warehouse.name.toLocaleLowerCase().includes("grainford") &&
         state.inventoryLots.some((lot) => lot.warehouseId === warehouse.id && lot.productId === wheat?.id && lot.quantity > 0)) ?? null;
@@ -123,7 +510,9 @@ function upgradeWorldState(state, seed) {
         retailPriceChanges,
         resourceOffers: upgradedResourceOffers,
         resourcePurchases,
-        manualProductionRuns
+        manualProductionRuns,
+        playerCommands,
+        auditLogs
     };
 }
 function addCompanyToWorld(state, input) {

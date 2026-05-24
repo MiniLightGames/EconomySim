@@ -536,6 +536,21 @@ export async function fetchGameData(): Promise<GameData> {
   };
 }
 
+function idempotencyHeaders(action: string): HeadersInit {
+  return {
+    "Idempotency-Key": makeIdempotencyKey(action)
+  };
+}
+
+function makeIdempotencyKey(action: string): string {
+  const randomPart =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+
+  return `web:${action}:${Date.now()}:${randomPart}`;
+}
+
 export async function runNextTick(): Promise<TickResponseDto> {
   return apiRequest<TickResponseDto>("/simulation/tick", {
     method: "POST",
@@ -546,6 +561,7 @@ export async function runNextTick(): Promise<TickResponseDto> {
 export async function createCompany(input: CreateCompanyInput): Promise<WorldState["companies"][number]> {
   return apiRequest<WorldState["companies"][number]>("/companies", {
     method: "POST",
+    headers: idempotencyHeaders("create-company"),
     body: JSON.stringify(input)
   });
 }
@@ -553,6 +569,7 @@ export async function createCompany(input: CreateCompanyInput): Promise<WorldSta
 export async function purchaseLand(input: LandPurchaseInput): Promise<LandPurchaseResponse> {
   return apiRequest<LandPurchaseResponse>("/land/purchase", {
     method: "POST",
+    headers: idempotencyHeaders("buy-land"),
     body: JSON.stringify(input)
   });
 }
@@ -560,6 +577,7 @@ export async function purchaseLand(input: LandPurchaseInput): Promise<LandPurcha
 export async function purchaseResource(input: ResourcePurchaseInput): Promise<ResourcePurchase> {
   return apiRequest<ResourcePurchase>("/resources/purchase", {
     method: "POST",
+    headers: idempotencyHeaders("buy-resource"),
     body: JSON.stringify(input)
   });
 }
@@ -567,6 +585,7 @@ export async function purchaseResource(input: ResourcePurchaseInput): Promise<Re
 export async function runProduction(input: ManualProductionInput): Promise<ManualProductionRun> {
   return apiRequest<ManualProductionRun>("/production/run", {
     method: "POST",
+    headers: idempotencyHeaders("run-production"),
     body: JSON.stringify(input)
   });
 }
@@ -574,6 +593,7 @@ export async function runProduction(input: ManualProductionInput): Promise<Manua
 export async function setRetailPrice(input: RetailPriceInput): Promise<RetailPriceResponse> {
   return apiRequest<RetailPriceResponse>(`/retail/offers/${encodeURIComponent(input.retailOfferId)}/price`, {
     method: "POST",
+    headers: idempotencyHeaders("set-retail-price"),
     body: JSON.stringify({
       companyId: input.companyId,
       priceMinor: input.priceMinor,
