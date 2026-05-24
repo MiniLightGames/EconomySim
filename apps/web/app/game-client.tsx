@@ -101,6 +101,46 @@ import {
   type MapLayerState
 } from "../lib/view-model";
 
+
+interface LoopActionSnapshot {
+  readonly tick: number;
+  readonly moneyMinor: number;
+  readonly eventCount: number;
+  readonly metricCount: number;
+  readonly newsCount: number;
+  readonly inventoryByProduct: Readonly<Record<string, number>>;
+}
+
+interface ActionResultSummary {
+  readonly id: string;
+  readonly title: string;
+  readonly status: "success" | "warning" | "error";
+  readonly description: string;
+  readonly moneyDeltaMinor: number;
+  readonly inventoryDeltas: readonly string[];
+  readonly createdEntities: readonly string[];
+  readonly eventDelta: number;
+  readonly metricDelta: number;
+  readonly newsHeadlines: readonly string[];
+  readonly tick: number;
+}
+
+interface FirstBusinessMapHighlights {
+  readonly cityId: string | null;
+  readonly warehouseIds: readonly string[];
+  readonly routeIds: readonly string[];
+}
+
+interface FirstBusinessStep {
+  readonly id: "choose-country" | "register-company" | "buy-premise" | "buy-wheat" | "produce-bread" | "set-price" | "run-tick" | "review-results";
+  readonly label: string;
+  readonly description: string;
+  readonly complete: boolean;
+  readonly active: boolean;
+  readonly disabledReason: string | null;
+  readonly statusText: string;
+}
+
 export function GameClient() {
   const [data, setData] = useState<GameData | null>(null);
   const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null);
@@ -145,8 +185,9 @@ export function GameClient() {
   const [isUpdatingRetailPrice, setIsUpdatingRetailPrice] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [lastActionResult, setLastActionResult] = useState<ActionResultSummary | null>(null);
 
-  async function refreshWorld(showLoader = true) {
+  async function refreshWorld(showLoader = true): Promise<GameData | null> {
     if (showLoader) {
       setIsLoading(true);
     }
@@ -262,8 +303,11 @@ export function GameClient() {
 
         return firstOffer?.id ?? null;
       });
+
+      return nextData;
     } catch (refreshError) {
       setError(formatApiError(refreshError));
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -274,13 +318,25 @@ export function GameClient() {
   }, []);
 
   async function handleNextTick() {
+    const companyId = selectedOperationsCompanyId ?? data?.world.companies.find((company) => company.ownerType === "player")?.id ?? null;
+    const before = createLoopActionSnapshot(data, companyId);
     setIsTicking(true);
     setNotice(null);
 
     try {
       const result = await runNextTick();
       setNotice(`Тик ${result.summary.currentTick} рассчитан: новости ${result.news.length}, метрики ${result.metrics.length}.`);
-      await refreshWorld(false);
+      const refreshed = await refreshWorld(false);
+      setLastActionResult(
+        buildActionResultSummary({
+          before,
+          createdEntities: result.news.slice(0, 3).map((item) => `News: ${item.headline}`),
+          data: refreshed,
+          description: `Tick ${result.summary.currentTick}: events ${result.events.length}, metrics ${result.metrics.length}, news ${result.news.length}.`,
+          selectedCompanyId: companyId,
+          title: "Run tick"
+        })
+      );
     } catch (tickError) {
       setError(formatApiError(tickError));
     } finally {
@@ -302,6 +358,7 @@ export function GameClient() {
       return;
     }
 
+    const before = createLoopActionSnapshot(data, null);
     setIsCreatingCompany(true);
     setNotice(null);
 
@@ -313,7 +370,17 @@ export function GameClient() {
       setCompanyName("");
       setSelectedOperationsCompanyId(company.id);
       setNotice(`${trimmedName} зарегистрирована через command/tick. Теперь купите или арендуйте помещение.`);
-      await refreshWorld(false);
+      const refreshed = await refreshWorld(false);
+      setLastActionResult(
+        buildActionResultSummary({
+          before,
+          createdEntities: [`Company: ${company.name}`, `Country: ${company.countryId}`],
+          data: refreshed,
+          description: "Company command accepted and applied through the tick model.",
+          selectedCompanyId: company.id,
+          title: "Register company"
+        })
+      );
     } catch (createError) {
       setError(formatApiError(createError));
     } finally {
@@ -335,6 +402,7 @@ export function GameClient() {
       return;
     }
 
+    const before = createLoopActionSnapshot(data, companyId);
     setIsPurchasingLand(true);
     setNotice(null);
 
@@ -345,7 +413,21 @@ export function GameClient() {
         mode: "purchase"
       });
       setNotice(`Помещение готово: ${result.warehouse?.name ?? "warehouse"}. Можно покупать wheat и производить bread.`);
-      await refreshWorld(false);
+      const refreshed = await refreshWorld(false);
+      setLastActionResult(
+        buildActionResultSummary({
+          before,
+          createdEntities: [
+            result.warehouse ? `Warehouse: ${result.warehouse.name}` : "Warehouse: created",
+            result.productionPlan ? `Production plan: ${result.productionPlan.id}` : "Production plan: starter",
+            result.retailOffer ? `Retail offer: ${result.retailOffer.id}` : "Retail offer: starter"
+          ],
+          data: refreshed,
+          description: "Premise command created the operational warehouse, starter recipe, retail offer and license.",
+          selectedCompanyId: companyId,
+          title: "Buy / lease premise"
+        })
+      );
     } catch (landError) {
       setError(formatApiError(landError));
     } finally {
@@ -381,6 +463,7 @@ export function GameClient() {
       return;
     }
 
+    const before = createLoopActionSnapshot(data, companyId);
     setIsPurchasingResource(true);
     setNotice(null);
 
@@ -400,7 +483,23 @@ export function GameClient() {
           ? `Ordered ${formatCompactNumber(purchase.quantity)} units of ${offer.productName}; shipment ${purchase.shipment?.status ?? "in transit"}. Production unlocks after delivery.`
           : `Bought ${formatCompactNumber(purchase.quantity)} units of ${offer.productName} by pickup.`
       );
-      await refreshWorld(false);
+      const refreshed = await refreshWorld(false);
+      setLastActionResult(
+        buildActionResultSummary({
+          before,
+          createdEntities: [
+            `Purchase: ${formatCompactNumber(purchase.quantity)} ${offer.productName}`,
+            purchase.shipment ? `Shipment: ${purchase.shipment.id} (${purchase.shipment.status})` : "Pickup stock: available now"
+          ],
+          data: refreshed,
+          description:
+            purchase.deliveryMode === "delivery"
+              ? "Resource order is in transit. Inventory is not production-ready until delivery completes on a tick."
+              : "Resource pickup completed immediately and inventory is available for production.",
+          selectedCompanyId: companyId,
+          title: "Buy wheat"
+        })
+      );
     } catch (purchaseError) {
       setError(formatApiError(purchaseError));
     } finally {
@@ -419,6 +518,7 @@ export function GameClient() {
       return;
     }
 
+    const before = createLoopActionSnapshot(data, companyId);
     setIsRunningProduction(true);
     setNotice(null);
 
@@ -429,7 +529,17 @@ export function GameClient() {
         requestedQuantity
       });
       setNotice(`Produced ${formatCompactNumber(run.producedQuantity)} units through simulation-core.`);
-      await refreshWorld(false);
+      const refreshed = await refreshWorld(false);
+      setLastActionResult(
+        buildActionResultSummary({
+          before,
+          createdEntities: [`Production run: ${run.id}`, `Output: ${formatCompactNumber(run.producedQuantity)}`],
+          data: refreshed,
+          description: `Inputs were costed into output inventory at ${formatMoneyMinor(run.outputUnitCostMinor ?? 0)} per unit.`,
+          selectedCompanyId: companyId,
+          title: "Produce bread"
+        })
+      );
     } catch (productionError) {
       setError(formatApiError(productionError));
     } finally {
@@ -457,6 +567,7 @@ export function GameClient() {
       return;
     }
 
+    const before = createLoopActionSnapshot(data, companyId);
     setIsUpdatingRetailPrice(true);
     setNotice(null);
 
@@ -468,7 +579,17 @@ export function GameClient() {
         currencyCode: offer.currencyCode
       });
       setNotice(`Retail price set to ${formatMoneyMinor(result.priceChange.newPriceMinor, result.priceChange.currencyCode)}.`);
-      await refreshWorld(false);
+      const refreshed = await refreshWorld(false);
+      setLastActionResult(
+        buildActionResultSummary({
+          before,
+          createdEntities: [`Retail offer: ${result.offer.productName}`, `Price: ${formatMoneyMinor(result.priceChange.newPriceMinor, result.priceChange.currencyCode)}`],
+          data: refreshed,
+          description: "Retail price command applied. Run a tick to let population demand buy available stock.",
+          selectedCompanyId: companyId,
+          title: "Set price"
+        })
+      );
     } catch (priceError) {
       setError(formatApiError(priceError));
     } finally {
@@ -725,6 +846,7 @@ export function GameClient() {
   const selectedMarket = data?.markets.find((market) => market.id === selectedMarketId) ?? data?.markets[0] ?? null;
   const playerCompanies = world ? getPlayerCompanies(world.companies) : [];
   const playerMoneyMinor = world ? getPlayerMoneyMinor(world.companies, PLAYER_ID, world.bankAccounts) : 0;
+  const firstBusinessMapHighlights = buildFirstBusinessMapHighlights(data, selectedCity?.id ?? selectedCityId, selectedOperationsCompanyId, selectedResourceOfferId);
 
   if (isLoading && !data) {
     return (
@@ -780,6 +902,7 @@ export function GameClient() {
           {error ? <ApiErrorBanner message={error} onRetry={() => void refreshWorld()} /> : null}
           {notice ? <NoticeBanner message={notice} onClose={() => setNotice(null)} /> : null}
           <FeedbackPanel data={data} selectedMarket={selectedMarket} />
+          <WhatChangedPanel result={lastActionResult} onDismiss={() => setLastActionResult(null)} />
           <WorldMap
             cities={world?.cities ?? []}
             countries={world?.countries ?? []}
@@ -787,6 +910,9 @@ export function GameClient() {
             environmentalIndexes={data?.environment.indexes ?? []}
             fronts={data?.wars.fronts ?? []}
             infrastructureLinks={world?.infrastructureLinks ?? []}
+            highlightedCityId={firstBusinessMapHighlights.cityId}
+            highlightedRouteIds={firstBusinessMapHighlights.routeIds}
+            highlightedWarehouseIds={firstBusinessMapHighlights.warehouseIds}
             logisticsRoutes={data?.logisticsRoutes ?? []}
             onToggleLayer={handleToggleMapLayer}
             resourceDeposits={data?.resourceDeposits.deposits ?? []}
@@ -823,6 +949,7 @@ export function GameClient() {
             isPurchasingLand={isPurchasingLand}
             isPurchasingResource={isPurchasingResource}
             isRunningProduction={isRunningProduction}
+            lastActionResult={lastActionResult}
             isUpdatingRetailPrice={isUpdatingRetailPrice}
             maxUnitPriceMinor={resourceMaxPriceMinor}
             productionQuantity={productionQuantity}
@@ -830,6 +957,7 @@ export function GameClient() {
             resourceDeliveryMode={resourceDeliveryMode}
             resourceQuantity={resourcePurchaseQuantity}
             selectedCompanyId={selectedOperationsCompanyId}
+            selectedCountryId={selectedCountry?.id ?? null}
             selectedResourceOfferId={selectedResourceOfferId}
             onCompanyChange={handleOperationsCompanyChange}
             onMaxUnitPriceChange={setResourceMaxPriceMinor}
@@ -1255,6 +1383,9 @@ function WorldMap({
   enabledLayers,
   environmentalIndexes,
   fronts,
+  highlightedCityId,
+  highlightedRouteIds,
+  highlightedWarehouseIds,
   infrastructureLinks,
   logisticsRoutes,
   onToggleLayer,
@@ -1274,6 +1405,9 @@ function WorldMap({
   readonly enabledLayers: MapLayerState;
   readonly environmentalIndexes: readonly EnvironmentalIndex[];
   readonly fronts: readonly Front[];
+  readonly highlightedCityId: string | null;
+  readonly highlightedRouteIds: readonly string[];
+  readonly highlightedWarehouseIds: readonly string[];
   readonly infrastructureLinks: readonly InfrastructureLink[];
   readonly logisticsRoutes: readonly LogisticsRoute[];
   readonly onToggleLayer: (layerId: MapLayerId) => void;
@@ -1367,6 +1501,8 @@ function WorldMap({
       })
     )
     .filter((link): link is NonNullable<typeof link> => link !== null);
+  const highlightedRouteIdSet = new Set(highlightedRouteIds);
+  const highlightedWarehouseIdSet = new Set(highlightedWarehouseIds);
   const logisticsLinks = logisticsRoutes
     .map((route) => {
       const origin = warehouses.find((warehouse) => warehouse.id === route.originWarehouseId);
@@ -1381,12 +1517,34 @@ function WorldMap({
       return {
         id: route.id,
         active: route.active,
+        highlighted: highlightedRouteIdSet.has(route.id),
         hasActiveShipment: shipments.some((shipment) => shipment.routeId === route.id && shipment.status === "in_transit"),
         from: projectGeoPoint(originCity.location, bounds),
         to: projectGeoPoint(destinationCity.location, bounds)
       };
     })
     .filter((link): link is NonNullable<typeof link> => link !== null);
+  const warehouseNodes = warehouses
+    .map((warehouse) => {
+      const city = cities.find((candidate) => candidate.id === warehouse.cityId);
+
+      if (!city) {
+        return null;
+      }
+
+      const point = projectGeoPoint(city.location, bounds);
+
+      return {
+        highlighted: highlightedWarehouseIdSet.has(warehouse.id),
+        id: warehouse.id,
+        name: warehouse.name,
+        point: {
+          x: point.x + (warehouse.id.charCodeAt(0) % 5) - 2,
+          y: point.y + (warehouse.id.charCodeAt(warehouse.id.length - 1) % 5) - 2
+        }
+      };
+    })
+    .filter((node): node is NonNullable<typeof node> => node !== null);
 
   return (
     <section
@@ -1468,11 +1626,11 @@ function WorldMap({
           {enabledLayers.logistics
             ? logisticsLinks.map((link) => (
                 <line
-                  className={link.active ? (link.hasActiveShipment ? "stroke-economy-gold" : "stroke-economy-teal/70") : "stroke-rose-400/55"}
+                  className={link.highlighted ? "stroke-economy-gold" : link.active ? (link.hasActiveShipment ? "stroke-economy-gold" : "stroke-economy-teal/70") : "stroke-rose-400/55"}
                   key={link.id}
-                  strokeDasharray={link.hasActiveShipment ? "0" : "1.8 1.4"}
+                  strokeDasharray={link.highlighted || link.hasActiveShipment ? "0" : "1.8 1.4"}
                   strokeLinecap="round"
-                  strokeWidth={link.hasActiveShipment ? "0.85" : "0.55"}
+                  strokeWidth={link.highlighted ? "1.2" : link.hasActiveShipment ? "0.85" : "0.55"}
                   x1={link.from.x}
                   x2={link.to.x}
                   y1={link.from.y}
@@ -1597,7 +1755,9 @@ function WorldMap({
             className={`absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold shadow-[0_0_18px_rgba(79,183,165,0.25)] transition ${
               selectedCityId === city.id
                 ? "border-stone-50 bg-economy-gold text-[#1b1205]"
-                : "border-economy-teal/80 bg-[#06110f]/85 text-stone-50 hover:bg-economy-teal"
+                : city.id === highlightedCityId
+                  ? "border-economy-gold bg-economy-gold/20 text-economy-gold ring-2 ring-economy-gold/40"
+                  : "border-economy-teal/80 bg-[#06110f]/85 text-stone-50 hover:bg-economy-teal"
             }`}
             key={city.id}
             onClick={() => onSelectCity(city)}
@@ -1607,6 +1767,23 @@ function WorldMap({
             <span className="h-2 w-2 rounded-full bg-current" />
             {city.name}
           </button>
+        ))}
+
+        {warehouseNodes.map((warehouse) => (
+          <div
+            aria-label={`Warehouse highlight ${warehouse.name}`}
+            className={`absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-bold shadow-xl ${
+              warehouse.highlighted
+                ? "border-economy-gold bg-[#221a0c]/90 text-economy-gold ring-2 ring-economy-gold/35"
+                : "border-[#344239] bg-black/50 text-stone-400"
+            }`}
+            data-testid={warehouse.highlighted ? "first-business-warehouse-highlight" : undefined}
+            key={warehouse.id}
+            style={{ left: `${warehouse.point.x}%`, top: `${warehouse.point.y}%` }}
+          >
+            <WarehouseIcon className="h-3 w-3" aria-hidden="true" />
+            {warehouse.highlighted ? "warehouse" : "wh"}
+          </div>
         ))}
 
         <div className="absolute bottom-3 left-3 right-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
@@ -2743,12 +2920,148 @@ function CreateCompanyPanel({
   );
 }
 
+
+function WhatChangedPanel({ result, onDismiss }: { readonly result: ActionResultSummary | null; readonly onDismiss: () => void }) {
+  if (!result) {
+    return (
+      <Panel icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />} title="What changed this tick?">
+        <p className="text-sm text-stone-400">Сделайте действие первого бизнеса, и здесь появятся money delta, inventory delta, events, metrics и новости.</p>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />} title="What changed this tick?">
+      <div className="grid gap-3" data-testid="what-changed-panel">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold text-stone-50">{result.title}</h3>
+            <p className="mt-1 text-xs text-stone-400">{result.description}</p>
+          </div>
+          <button className="rounded-md border border-[#344239] px-2 py-1 text-xs font-semibold text-stone-300 hover:border-economy-teal" onClick={onDismiss} type="button">
+            скрыть
+          </button>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-4">
+          <MiniStat label="Cash delta" value={formatSignedMoneyMinor(result.moneyDeltaMinor)} tone={result.moneyDeltaMinor < 0 ? "danger" : result.moneyDeltaMinor > 0 ? "success" : "neutral"} />
+          <MiniStat label="Inventory" value={result.inventoryDeltas.length.toString()} tone={result.inventoryDeltas.length > 0 ? "success" : "neutral"} />
+          <MiniStat label="Events" value={result.eventDelta.toString()} tone={result.eventDelta > 0 ? "success" : "neutral"} />
+          <MiniStat label="Metrics" value={result.metricDelta.toString()} tone={result.metricDelta > 0 ? "success" : "neutral"} />
+        </div>
+        {result.inventoryDeltas.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {result.inventoryDeltas.map((delta) => (
+              <span className="rounded border border-economy-teal/35 bg-economy-teal/10 px-2 py-1 text-xs text-economy-teal" key={delta}>
+                {delta}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {result.newsHeadlines.length > 0 ? (
+          <div className="grid gap-1.5">
+            {result.newsHeadlines.map((headline) => (
+              <p className="rounded-md border border-[#344239] bg-black/20 p-2 text-xs text-stone-300" key={headline}>
+                {headline}
+              </p>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+function FirstBusinessStepper({ steps }: { readonly steps: readonly FirstBusinessStep[] }) {
+  const completed = steps.filter((step) => step.complete).length;
+  const progress = steps.length > 0 ? completed / steps.length : 0;
+
+  return (
+    <section className="rounded-md border border-economy-gold/35 bg-economy-gold/10 p-3" data-testid="first-business-stepper">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <SubPanelTitle icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />} title="First Business stepper" />
+          <p className="mt-1 text-xs text-stone-400">Капитал → карта → страна → компания → помещение → wheat → bread → цена → tick → отчёт.</p>
+        </div>
+        <span className="rounded-md border border-economy-gold/50 bg-black/25 px-2 py-1 text-xs font-bold text-economy-gold">
+          {completed}/{steps.length}
+        </span>
+      </div>
+      <div aria-label={`First business progress ${Math.round(progress * 100)} percent`} className="mt-3 h-2 overflow-hidden rounded-full bg-[#243029]" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)}>
+        <div className="h-full rounded-full bg-economy-gold transition-all" style={{ width: `${Math.max(4, progress * 100)}%` }} />
+      </div>
+      <div className="mt-3 grid gap-2 xl:grid-cols-4">
+        {steps.map((step, index) => (
+          <article
+            className={`rounded-md border p-2 text-xs ${
+              step.complete
+                ? "border-economy-teal/40 bg-economy-teal/10 text-stone-100"
+                : step.active
+                  ? "border-economy-gold/60 bg-economy-gold/10 text-stone-100"
+                  : "border-[#344239] bg-black/20 text-stone-400"
+            }`}
+            key={step.id}
+          >
+            <div className="flex items-center gap-2">
+              {step.complete ? <CheckCircle2 className="h-4 w-4 text-economy-teal" aria-hidden="true" /> : <CircleAlert className="h-4 w-4 text-economy-gold" aria-hidden="true" />}
+              <span className="font-bold text-stone-50">{index + 1}. {step.label}</span>
+            </div>
+            <p className="mt-1 text-stone-400">{step.description}</p>
+            <p className="mt-2 font-semibold text-economy-gold">{step.statusText}</p>
+            {step.disabledReason ? <DisabledReason text={step.disabledReason} /> : null}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ActionResultDrawer({ result }: { readonly result: ActionResultSummary | null }) {
+  if (!result) {
+    return null;
+  }
+
+  return (
+    <aside className="rounded-md border border-economy-teal/35 bg-economy-teal/10 p-3" data-testid="action-result-drawer">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <SubPanelTitle icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />} title="Action result" />
+          <p className="mt-1 text-xs text-stone-400">{result.title}: {result.description}</p>
+        </div>
+        <StatusBadge label={result.status} tone={result.status === "error" ? "danger" : result.status === "warning" ? "warning" : "success"} />
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <MiniStat label="Money delta" value={formatSignedMoneyMinor(result.moneyDeltaMinor)} tone={result.moneyDeltaMinor < 0 ? "danger" : result.moneyDeltaMinor > 0 ? "success" : "neutral"} />
+        <MiniStat label="Events" value={result.eventDelta.toString()} />
+        <MiniStat label="News" value={result.newsHeadlines.length.toString()} />
+      </div>
+      {result.createdEntities.length > 0 ? (
+        <div className="mt-3 grid gap-1.5">
+          {result.createdEntities.map((entity) => (
+            <p className="rounded border border-[#344239] bg-black/25 px-2 py-1 text-xs text-stone-300" key={entity}>
+              {entity}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </aside>
+  );
+}
+
+function DisabledReason({ text }: { readonly text: string }) {
+  return (
+    <p className="rounded-md border border-economy-gold/35 bg-economy-gold/10 px-2 py-1 text-xs font-semibold text-economy-gold" data-testid="disabled-reason">
+      Причина блокировки: {text}
+    </p>
+  );
+}
+
 function OperationsPanel({
   data,
   isPurchasingLand,
   isPurchasingResource,
   isRunningProduction,
   isUpdatingRetailPrice,
+  lastActionResult,
   maxUnitPriceMinor,
   onCompanyChange,
   onMaxUnitPriceChange,
@@ -2766,6 +3079,7 @@ function OperationsPanel({
   resourceDeliveryMode,
   resourceQuantity,
   selectedCompanyId,
+  selectedCountryId,
   selectedResourceOfferId
 }: {
   readonly data: GameData | null;
@@ -2773,6 +3087,7 @@ function OperationsPanel({
   readonly isPurchasingResource: boolean;
   readonly isRunningProduction: boolean;
   readonly isUpdatingRetailPrice: boolean;
+  readonly lastActionResult: ActionResultSummary | null;
   readonly maxUnitPriceMinor: string;
   readonly onCompanyChange: (companyId: string) => void;
   readonly onMaxUnitPriceChange: (value: string) => void;
@@ -2790,6 +3105,7 @@ function OperationsPanel({
   readonly resourceDeliveryMode: "pickup" | "delivery";
   readonly resourceQuantity: string;
   readonly selectedCompanyId: string | null;
+  readonly selectedCountryId: string | null;
   readonly selectedResourceOfferId: string | null;
 }) {
   const companies = data ? getPlayerCompanies(data.world.companies) : [];
@@ -2858,12 +3174,123 @@ function OperationsPanel({
         ) ?? null
       : null;
   const productionBlockedByInbound = inboundShipments.length > 0;
-  const lastPurchase = data?.resourcePurchases.at(-1) ?? null;
-  const lastRun = data?.productionRuns.at(-1) ?? null;
+  const companyResourcePurchases = data?.resourcePurchases.filter((purchase) => purchase.buyerCompanyId === selectedCompany?.id) ?? [];
+  const companyProductionRuns = data?.productionRuns.filter((run) => run.companyId === selectedCompany?.id) ?? [];
+  const inputProductIds = productionPlan?.inputs.map((input) => input.productId) ?? [];
+  const availableInputQuantity = companyInventory
+    .filter((lot) => inputProductIds.includes(lot.productId))
+    .reduce((total, lot) => total + lot.quantity, 0);
+  const outputInventoryQuantity = companyInventory
+    .filter((lot) => lot.productId === outputProduct?.id)
+    .reduce((total, lot) => total + lot.quantity, 0);
+  const lastPurchase = companyResourcePurchases.at(-1) ?? data?.resourcePurchases.at(-1) ?? null;
+  const lastRun = companyProductionRuns.at(-1) ?? data?.productionRuns.at(-1) ?? null;
+  const hasResourceOrder = companyResourcePurchases.length > 0;
+  const hasProductionOutput = companyProductionRuns.length > 0 || outputInventoryQuantity > 0;
+  const hasReviewedResults = retailRevenueMinor > 0 || retailSales.length > 0 || Boolean(getLatestProfitabilityExplanation(data, selectedCompany?.id ?? null));
+  const resourceDisabledReason = !selectedCompany
+    ? "нет компании"
+    : !companyHasPremise
+      ? "нет склада"
+      : resourceDeliveryMode === "delivery" && !deliveryRoute
+        ? "нет активного маршрута"
+        : null;
+  const productionDisabledReason = !selectedCompany
+    ? "нет компании"
+    : !companyHasPremise
+      ? "нет склада"
+      : productionBlockedByInbound
+        ? "товар в пути"
+        : availableInputQuantity <= 0
+          ? "нет wheat"
+          : null;
+  const priceDisabledReason = !selectedCompany
+    ? "нет компании"
+    : !companyHasPremise
+      ? "нет склада"
+      : !playerRetailOffer
+        ? "нет active retail offer"
+        : null;
+  const firstBusinessSteps: readonly FirstBusinessStep[] = [
+    {
+      active: !selectedCountryId,
+      complete: Boolean(selectedCountryId),
+      description: "Карта и страна определяют валюту, город и стартовую юрисдикцию.",
+      disabledReason: null,
+      id: "choose-country",
+      label: "Choose country",
+      statusText: selectedCountryId ?? "выберите страну на карте"
+    },
+    {
+      active: companies.length === 0,
+      complete: companies.length > 0,
+      description: "Юрлицо открывает доступ к земле, складам, закупкам и продажам.",
+      disabledReason: data?.world.countries.length ? null : "нет страны",
+      id: "register-company",
+      label: "Register company",
+      statusText: selectedCompany?.name ?? "ожидает регистрации"
+    },
+    {
+      active: companies.length > 0 && !companyHasPremise,
+      complete: companyHasPremise,
+      description: "Помещение создаёт склад, starter recipe, retail offer и лицензию.",
+      disabledReason: companies.length > 0 ? null : "нет компании",
+      id: "buy-premise",
+      label: "Buy/lease premise",
+      statusText: companyHasPremise ? `${companyWarehouses.length} warehouse(s)` : "нет склада"
+    },
+    {
+      active: companyHasPremise && !hasResourceOrder,
+      complete: hasResourceOrder,
+      description: "Pickup даёт stock сразу; delivery сначала создаёт shipment.",
+      disabledReason: resourceDisabledReason,
+      id: "buy-wheat",
+      label: "Buy wheat",
+      statusText: inboundShipments.length > 0 ? "in transit" : availableInputQuantity > 0 ? "available for production" : lastPurchase?.status ?? "ordered"
+    },
+    {
+      active: companyHasPremise && hasResourceOrder && !hasProductionOutput,
+      complete: hasProductionOutput,
+      description: "Производство использует только доставленный inventory.",
+      disabledReason: productionDisabledReason,
+      id: "produce-bread",
+      label: "Produce bread",
+      statusText: hasProductionOutput ? `${formatCompactNumber(outputInventoryQuantity)} stock` : productionDisabledReason ?? "готово к запуску"
+    },
+    {
+      active: hasProductionOutput && !lastPriceChange,
+      complete: Boolean(lastPriceChange),
+      description: "Цена — решение компании, спрос покупает stock на следующем тике.",
+      disabledReason: priceDisabledReason,
+      id: "set-price",
+      label: "Set price",
+      statusText: lastPriceChange ? formatMoneyMinor(lastPriceChange.newPriceMinor, lastPriceChange.currencyCode) : priceDisabledReason ?? "ожидает цены"
+    },
+    {
+      active: Boolean(lastPriceChange) && !hasReviewedResults,
+      complete: hasReviewedResults,
+      description: "Тик запускает population demand, продажи, новости и margin metrics.",
+      disabledReason: lastPriceChange ? null : "нет установленной цены",
+      id: "run-tick",
+      label: "Run tick",
+      statusText: hasReviewedResults ? "sales resolved" : "ожидает tick"
+    },
+    {
+      active: hasReviewedResults,
+      complete: hasReviewedResults,
+      description: "Проверьте продажи, новости, cash delta и gross margin.",
+      disabledReason: hasReviewedResults ? null : "нет продаж/маржи",
+      id: "review-results",
+      label: "Review sales/news/margin",
+      statusText: hasReviewedResults ? formatSignedMoneyMinor(retailGrossMarginMinor, selectedCompany?.currencyCode ?? "ECO") : "нет отчёта"
+    }
+  ];
 
   return (
     <Panel icon={<Factory className="h-4 w-4" aria-hidden="true" />} title="Player Operations">
       <div className="grid gap-3" data-testid="operations-panel">
+        <FirstBusinessStepper steps={firstBusinessSteps} />
+        <ActionResultDrawer result={lastActionResult} />
         {companies.length > 0 ? (
           <>
             <label className="grid gap-1 text-sm text-stone-300">
@@ -2958,9 +3385,11 @@ function OperationsPanel({
                         />
                       </label>
                     </div>
+                    {resourceDisabledReason ? <DisabledReason text={resourceDisabledReason} /> : null}
                     <button
                       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-economy-gold/70 bg-economy-gold px-3 text-sm font-bold text-[#17110a] transition hover:bg-[#efc46c] disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isPurchasingResource || !companyHasPremise || (resourceDeliveryMode === "delivery" && !deliveryRoute)}
+                      disabled={isPurchasingResource || Boolean(resourceDisabledReason)}
+                      title={resourceDisabledReason ?? undefined}
                       type="submit"
                     >
                       {isPurchasingResource ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ShoppingBasket className="h-4 w-4" aria-hidden="true" />}
@@ -2990,9 +3419,11 @@ function OperationsPanel({
                         value={productionQuantity}
                       />
                     </label>
+                    {productionDisabledReason ? <DisabledReason text={productionDisabledReason} /> : null}
                     <button
                       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-economy-teal/70 bg-economy-teal px-3 text-sm font-bold text-[#06110f] transition hover:bg-[#6bcbbb] disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isRunningProduction || !companyHasPremise || productionBlockedByInbound}
+                      disabled={isRunningProduction || Boolean(productionDisabledReason)}
+                      title={productionDisabledReason ?? undefined}
                       type="submit"
                     >
                       {isRunningProduction ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Factory className="h-4 w-4" aria-hidden="true" />}
@@ -3028,9 +3459,11 @@ function OperationsPanel({
                         value={retailPriceMinor}
                       />
                     </label>
+                    {priceDisabledReason ? <DisabledReason text={priceDisabledReason} /> : null}
                     <button
                       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-economy-gold/70 bg-economy-gold px-3 text-sm font-bold text-[#17110a] transition hover:bg-[#efc46c] disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isUpdatingRetailPrice || !companyHasPremise}
+                      disabled={isUpdatingRetailPrice || Boolean(priceDisabledReason)}
+                      title={priceDisabledReason ?? undefined}
                       type="submit"
                     >
                       {isUpdatingRetailPrice ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <BadgeDollarSign className="h-4 w-4" aria-hidden="true" />}
@@ -3638,6 +4071,146 @@ function average(values: readonly number[]): number {
   }
 
   return Math.min(1, Math.max(0, value));
+}
+
+
+function createLoopActionSnapshot(data: GameData | null, companyId: string | null): LoopActionSnapshot {
+  if (!data) {
+    return {
+      eventCount: 0,
+      inventoryByProduct: {},
+      metricCount: 0,
+      moneyMinor: 0,
+      newsCount: 0,
+      tick: 0
+    };
+  }
+
+  const warehouseIds = new Set(data.warehouses.filter((warehouse) => warehouse.companyId === companyId).map((warehouse) => warehouse.id));
+  const inventoryByProduct: Record<string, number> = {};
+
+  for (const lot of data.world.inventoryLots) {
+    if (warehouseIds.has(lot.warehouseId)) {
+      inventoryByProduct[lot.productId] = (inventoryByProduct[lot.productId] ?? 0) + lot.quantity;
+    }
+  }
+
+  return {
+    eventCount: data.world.events.length,
+    inventoryByProduct,
+    metricCount: data.metrics.length,
+    moneyMinor: getPlayerMoneyMinor(data.world.companies, PLAYER_ID, data.world.bankAccounts),
+    newsCount: data.news.length,
+    tick: data.summary.currentTick
+  };
+}
+
+function buildActionResultSummary({
+  before,
+  createdEntities,
+  data,
+  description,
+  selectedCompanyId,
+  status = "success",
+  title
+}: {
+  readonly before: LoopActionSnapshot;
+  readonly createdEntities?: readonly string[];
+  readonly data: GameData | null;
+  readonly description: string;
+  readonly selectedCompanyId: string | null;
+  readonly status?: ActionResultSummary["status"];
+  readonly title: string;
+}): ActionResultSummary {
+  const after = createLoopActionSnapshot(data, selectedCompanyId);
+  const productNames = new Map((data?.world.products ?? []).map((product) => [product.id, product.name] as const));
+  const productIds = new Set([...Object.keys(before.inventoryByProduct), ...Object.keys(after.inventoryByProduct)]);
+  const inventoryDeltas = [...productIds]
+    .map((productId) => {
+      const delta = (after.inventoryByProduct[productId] ?? 0) - (before.inventoryByProduct[productId] ?? 0);
+
+      if (delta === 0) {
+        return null;
+      }
+
+      const sign = delta > 0 ? "+" : "";
+      return `${productNames.get(productId) ?? productId}: ${sign}${formatCompactNumber(delta)}`;
+    })
+    .filter((delta): delta is string => delta !== null);
+  const latestNews = (data?.news ?? []).slice(Math.max(0, before.newsCount)).slice(-3).map((item) => item.headline);
+
+  return {
+    createdEntities: createdEntities ?? [],
+    description,
+    eventDelta: Math.max(0, after.eventCount - before.eventCount),
+    id: `${title}-${Date.now()}`,
+    inventoryDeltas,
+    metricDelta: Math.max(0, after.metricCount - before.metricCount),
+    moneyDeltaMinor: after.moneyMinor - before.moneyMinor,
+    newsHeadlines: latestNews,
+    status,
+    tick: after.tick,
+    title
+  };
+}
+
+function buildFirstBusinessMapHighlights(
+  data: GameData | null,
+  selectedCityId: string | null,
+  selectedCompanyId: string | null,
+  selectedResourceOfferId: string | null
+): FirstBusinessMapHighlights {
+  if (!data) {
+    return {
+      cityId: selectedCityId,
+      routeIds: [],
+      warehouseIds: []
+    };
+  }
+
+  const companyWarehouseIds = data.warehouses.filter((warehouse) => warehouse.companyId === selectedCompanyId).map((warehouse) => warehouse.id);
+  const highlightedWarehouseIds = new Set(companyWarehouseIds);
+  const selectedOffer = data.resourceOffers.find((offer) => offer.id === selectedResourceOfferId) ?? data.resourceOffers[0] ?? null;
+
+  if (selectedOffer) {
+    highlightedWarehouseIds.add(selectedOffer.warehouseId);
+  }
+
+  const activeRouteIds = new Set(
+    data.shipments
+      .filter((shipment) => companyWarehouseIds.includes(shipment.destinationWarehouseId) && shipment.status === "in_transit")
+      .map((shipment) => shipment.routeId)
+  );
+
+  if (selectedOffer) {
+    const route = data.logisticsRoutes.find(
+      (candidate) =>
+        candidate.originWarehouseId === selectedOffer.warehouseId &&
+        companyWarehouseIds.includes(candidate.destinationWarehouseId) &&
+        candidate.active &&
+        !candidate.blockedReason
+    );
+
+    if (route) {
+      activeRouteIds.add(route.id);
+    }
+  }
+
+  const firstCompanyWarehouse = data.warehouses.find((warehouse) => companyWarehouseIds.includes(warehouse.id));
+
+  return {
+    cityId: firstCompanyWarehouse?.cityId ?? selectedCityId,
+    routeIds: [...activeRouteIds],
+    warehouseIds: [...highlightedWarehouseIds]
+  };
+}
+
+function getLatestProfitabilityExplanation(data: GameData | null, companyId: string | null) {
+  return (
+    data?.world.explanations
+      .filter((explanation) => explanation.targetType === "profitability" && explanation.targetId === companyId)
+      .sort((left, right) => right.tick - left.tick)[0] ?? null
+  );
 }
 
 function formatSignedMoneyMinor(value: number, currencyCode = "ECO"): string {

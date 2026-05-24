@@ -56,3 +56,7 @@ ADR-XXXX-short-name.md
 - `P1-TASK-20260524-0034-first-business-onboarding-ui.md`
 - `P1-TASK-20260524-0035-land-premise-lease-model.md`
 - `P1-TASK-20260524-0036-seed-scale-balance-v1.md`
+
+## Recent stage completions
+
+- `P1-TASK-20260524-0034-first-business-onboarding-ui.md` - Done: guided first-business UI, action summaries, disabled reasons, and map highlights.

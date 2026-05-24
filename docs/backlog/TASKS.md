@@ -13,10 +13,11 @@ This file is the short operational queue for autonomous vertical slices.
 - [x] `P1-TASK-20260524-0029-command-batch-dependencies.md` - `/simulation/tick` now supports dependent command batches with temporary refs, deterministic dependency ordering, all-or-nothing rollback, partial mode, and command results.
 - [x] `P1-TASK-20260524-0032-player-resource-logistics-delivery-loop.md` - player resource purchases now support pickup/direct and shipment delivery modes; in-transit resources cannot be used for production until delivered.
 - [x] `P1-TASK-20260524-0033-player-margin-accounting.md` - player operations now track lot-level cost basis, production cost allocation, retail COGS, gross margin, cash delta, and P&L UI.
+- [x] `P1-TASK-20260524-0034-first-business-onboarding-ui.md` - Player Operations now has a guided First Business stepper, disabled-state reasons, action result drawer, map highlights, and What changed this tick summaries.
 
 ## Next
 
-1. `P1-TASK-20260524-0034-first-business-onboarding-ui.md` - turn the player operations panel into a guided first-business stepper with disabled-state reasons and action result summaries.
-2. `P1-TASK-20260524-0035-land-premise-lease-model.md` - split land, premise/building, lease and purchase into a clearer domain model.
-3. `P1-TASK-20260524-0036-seed-scale-balance-v1.md` - expand the seed world toward prototype scale after player-loop accounting is stable.
+1. `P1-TASK-20260524-0035-land-premise-lease-model.md` - split land, premise/building, lease and purchase into a clearer domain model.
+2. `P1-TASK-20260524-0036-seed-scale-balance-v1.md` - expand the seed world toward prototype scale after player-loop accounting is stable.
+3. `P1-TASK-20260524-0030-browser-e2e-command-player-loop.md` - cover the guided player loop with browser-level regression tests.
 4. `P2-TASK-operation-analytics` - chart resource spend, production output, retail revenue, and margin after player sales.

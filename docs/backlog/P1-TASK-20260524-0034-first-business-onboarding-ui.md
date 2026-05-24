@@ -25,3 +25,14 @@ Player Operations уже содержит actions первого vertical slice,
 - Игрок может пройти first business loop без знания внутренней модели.
 - UI объясняет, почему действие недоступно.
 - После тика видны продажи, новости и summary изменений.
+
+## Status
+
+Done in stage 7.
+
+## Implementation Notes
+
+- Added First Business stepper with the full 30-minute path.
+- Added disabled-state reasons for missing warehouse, wheat, retail offer, and in-transit shipments.
+- Added action result drawer and What changed this tick panel.
+- Added map highlights for the selected country/city, warehouses, and active resource route.
