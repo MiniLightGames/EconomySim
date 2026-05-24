@@ -3,6 +3,8 @@ export type CurrencyCode = "ECO" | "NCR" | "SOV";
 export type NeedCategory = "food" | "housing" | "transport" | "medicine" | "entertainment";
 export type TransportMode = "road" | "rail" | "sea" | "multimodal";
 export type ShipmentStatus = "pending" | "in_transit" | "delivered" | "blocked" | "cancelled";
+export type ResourcePurchaseDeliveryMode = "pickup" | "delivery";
+export type ResourcePurchaseStatus = "completed" | "ordered" | "in_transit" | "delivered" | "failed";
 export type FinancialAssetType = "stock" | "bond" | "currency" | "commodity";
 export type OrderSide = "buy" | "sell";
 export type OrderStatus = "open" | "partially_filled" | "filled" | "cancelled" | "rejected";
@@ -256,8 +258,12 @@ export interface ResourcePurchase {
   readonly quantity: number;
   readonly unitPriceMinor: number;
   readonly totalPriceMinor: number;
+  readonly goodsCostMinor: number;
+  readonly logisticsCostMinor: number;
   readonly quality: number;
-  readonly status: "completed";
+  readonly deliveryMode: ResourcePurchaseDeliveryMode;
+  readonly shipmentId: EntityId | null;
+  readonly status: ResourcePurchaseStatus;
 }
 
 export interface ProductionRunInputConsumption {
@@ -1538,6 +1544,9 @@ export interface BuyResourceCommand extends PlayerCommandBatchDependencyHints {
   readonly quantity: number;
   readonly maxUnitPriceMinor: number;
   readonly buyerWarehouseId?: EntityId;
+  readonly deliveryMode?: ResourcePurchaseDeliveryMode;
+  readonly routeId?: EntityId;
+  readonly transportCompanyId?: EntityId;
 }
 
 export interface RunManualProductionCommand extends PlayerCommandBatchDependencyHints {

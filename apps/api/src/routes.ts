@@ -409,7 +409,9 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
         });
       }
 
-      return reply.status(execution.duplicate ? 200 : 201).send({ ...purchase, commandRecord: execution.commandRecords[0] ?? null });
+      const shipment = purchase.shipmentId ? execution.state.shipments.find((candidate) => candidate.id === purchase.shipmentId) ?? null : null;
+
+      return reply.status(execution.duplicate ? 200 : 201).send({ ...purchase, shipment, commandRecord: execution.commandRecords[0] ?? null });
     } catch (error) {
       throw mapOperationsError(error);
     }
@@ -1092,6 +1094,9 @@ function mapOperationsError(error: unknown) {
     "INVALID_RESOURCE_PURCHASE",
     "RESOURCE_PRICE_EXCEEDS_LIMIT",
     "RESOURCE_QUANTITY_EXCEEDS_OFFER_LIMIT",
+    "INVALID_RESOURCE_DELIVERY_MODE",
+    "LOGISTICS_ROUTE_REQUIRED",
+    "LOGISTICS_ROUTE_BLOCKED",
     "UNKNOWN_PRODUCT",
     "UNKNOWN_OR_INACTIVE_RESOURCE_SELLER",
     "PLAYER_COMPANY_REQUIRED",
@@ -1114,6 +1119,7 @@ function mapOperationsError(error: unknown) {
     "INVALID_PRODUCTION_QUANTITY",
     "PRODUCTION_WAREHOUSE_REQUIRED",
     "COMPANY_LICENSE_REQUIRED",
+    "INPUT_SHIPMENT_IN_TRANSIT",
     "INSUFFICIENT_PRODUCTION_INPUTS",
     "INVALID_RETAIL_PRICE",
     "UNKNOWN_RETAIL_OFFER",

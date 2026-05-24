@@ -320,7 +320,14 @@ export interface ResourcePurchaseInput {
   readonly quantity: number;
   readonly maxUnitPriceMinor: number;
   readonly buyerWarehouseId?: string;
+  readonly deliveryMode?: "pickup" | "delivery";
+  readonly routeId?: string;
+  readonly transportCompanyId?: string;
 }
+
+export type ResourcePurchaseResponse = ResourcePurchase & {
+  readonly shipment?: Shipment | null;
+};
 
 export interface ManualProductionInput {
   readonly companyId: string;
@@ -417,6 +424,7 @@ export interface CommandResultDto {
   readonly productionPlanId: string | null;
   readonly retailOfferId: string | null;
   readonly resourcePurchaseId: string | null;
+  readonly shipmentId: string | null;
   readonly productionRunId: string | null;
   readonly retailPriceChangeId: string | null;
   readonly eventIds: readonly string[];
@@ -609,8 +617,8 @@ export async function purchaseLand(input: LandPurchaseInput): Promise<LandPurcha
   });
 }
 
-export async function purchaseResource(input: ResourcePurchaseInput): Promise<ResourcePurchase> {
-  return apiRequest<ResourcePurchase>("/resources/purchase", {
+export async function purchaseResource(input: ResourcePurchaseInput): Promise<ResourcePurchaseResponse> {
+  return apiRequest<ResourcePurchaseResponse>("/resources/purchase", {
     method: "POST",
     headers: idempotencyHeaders("buy-resource"),
     body: JSON.stringify(input)

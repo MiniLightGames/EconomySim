@@ -66,6 +66,44 @@ export function validatePlayerCommandsAgainstWorld(state: WorldState, commands: 
           resourceOfferId: command.resourceOfferId
         });
       }
+
+      if (command.deliveryMode === "delivery") {
+        const buyerWarehouse = command.buyerWarehouseId
+          ? state.warehouses.find((warehouse) => warehouse.id === command.buyerWarehouseId && warehouse.companyId === company?.id)
+          : state.warehouses.find((warehouse) => warehouse.companyId === company?.id);
+        const route = buyerWarehouse
+          ? state.logisticsRoutes.find(
+              (candidate) =>
+                candidate.originWarehouseId === offer?.warehouseId &&
+                candidate.destinationWarehouseId === buyerWarehouse.id &&
+                (!command.routeId || candidate.id === command.routeId) &&
+                (!command.transportCompanyId || candidate.transportCompanyId === command.transportCompanyId)
+            )
+          : null;
+
+        if (!buyerWarehouse) {
+          throw badRequest("BUYER_WAREHOUSE_REQUIRED", "Delivery resource purchase needs a buyer warehouse.", {
+            commandId: command.commandId,
+            buyerCompanyId: command.buyerCompanyId
+          });
+        }
+
+        if (!route || !route.active) {
+          throw badRequest("LOGISTICS_ROUTE_REQUIRED", "Delivery resource purchase requires an active route from seller to buyer warehouse.", {
+            commandId: command.commandId,
+            resourceOfferId: command.resourceOfferId,
+            buyerWarehouseId: buyerWarehouse.id
+          });
+        }
+
+        if (route.blockedReason) {
+          throw badRequest("LOGISTICS_ROUTE_BLOCKED", "Delivery resource purchase route is currently blocked.", {
+            commandId: command.commandId,
+            routeId: route.id,
+            reason: route.blockedReason
+          });
+        }
+      }
     }
 
     if (command.type === "RunManualProductionCommand") {

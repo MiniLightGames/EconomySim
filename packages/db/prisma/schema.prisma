@@ -1289,6 +1289,8 @@ model IllegalContract {
   @@index([sellerCompanyId])
   @@index([buyerOwnerType, buyerOwnerId])
   @@index([productId])
+  @@index([deliveryMode])
+  @@index([shipmentId])
   @@index([status])
 }
 
@@ -1591,7 +1593,11 @@ model ResourcePurchase {
   quantity          Int
   unitPriceMinor    BigInt
   totalPriceMinor   BigInt
+  goodsCostMinor    BigInt   @default(0)
+  logisticsCostMinor BigInt  @default(0)
   quality           Float
+  deliveryMode      String   @default("pickup")
+  shipmentId        String?
   status            String
   createdAt         DateTime @default(now())
 

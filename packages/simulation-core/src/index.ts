@@ -131,6 +131,7 @@ type MutableProductionPlan = Omit<Mutable<ProductionPlan>, "inputs"> & { inputs:
 type MutableInventoryLot = Mutable<InventoryLot>;
 type MutablePopulationCohort = Mutable<PopulationCohort>;
 type MutableShipment = Mutable<Shipment>;
+type MutableResourcePurchase = Mutable<ResourcePurchase>;
 type MutableLogisticsRoute = Omit<Mutable<LogisticsRoute>, "nodeIds" | "infrastructureLinkIds"> & {
   nodeIds: string[];
   infrastructureLinkIds: string[];
@@ -247,11 +248,15 @@ export interface BuyResourceInput {
   readonly quantity: number;
   readonly maxUnitPriceMinor: number;
   readonly buyerWarehouseId?: string;
+  readonly deliveryMode?: "pickup" | "delivery";
+  readonly routeId?: string;
+  readonly transportCompanyId?: string;
 }
 
 export interface BuyResourceResult {
   readonly state: WorldState;
   readonly purchase: ResourcePurchase;
+  readonly shipment: Shipment | null;
 }
 
 export interface RunManualProductionInput {
@@ -548,7 +553,7 @@ export function runTick(input: TickInput): TickResult {
   const commandNews: NewsItem[] = [];
   const demandRecords: DemandRecord[] = [];
   const financialTransactions: FinancialTransaction[] = [];
-  const resourcePurchases: ResourcePurchase[] = [...loadedState.resourcePurchases];
+  const resourcePurchases: MutableResourcePurchase[] = loadedState.resourcePurchases.map((purchase) => ({ ...purchase }));
   const manualProductionRuns: ManualProductionRun[] = [...loadedState.manualProductionRuns];
   const commandAdjustedState: WorldState = {
     ...loadedState,
@@ -562,6 +567,9 @@ export function runTick(input: TickInput): TickResult {
     retailPriceChanges,
     resourcePurchases,
     manualProductionRuns,
+    shipments,
+    logisticsRoutes,
+    transportCompanies,
     financialTransactions: loadedState.financialTransactions,
     licenses
   };
@@ -601,6 +609,9 @@ export function runTick(input: TickInput): TickResult {
       licenses,
       resourcePurchases,
       manualProductionRuns,
+      shipments,
+      logisticsRoutes,
+      transportCompanies,
       financialTransactions,
       events: economyEvents,
       metrics: economyMetrics,
@@ -663,6 +674,7 @@ export function runTick(input: TickInput): TickResult {
     state: commandAdjustedState,
     shipments,
     inventoryLots,
+    resourcePurchases,
     nextTick,
     seed: input.seed,
     events: economyEvents,
@@ -1166,7 +1178,11 @@ export function buyResource(state: WorldState, input: BuyResourceInput, seed = "
     quantity,
     unitPriceMinor: offer.unitPriceMinor,
     totalPriceMinor,
+    goodsCostMinor: totalPriceMinor,
+    logisticsCostMinor: 0,
     quality: offer.quality,
+    deliveryMode: "pickup",
+    shipmentId: null,
     status: "completed"
   };
   const transaction: FinancialTransaction = {
@@ -1241,7 +1257,8 @@ export function buyResource(state: WorldState, input: BuyResourceInput, seed = "
 
   return {
     state: nextState,
-    purchase
+    purchase,
+    shipment: null
   };
 }
 
@@ -2446,6 +2463,16 @@ function selectRoute(state: WorldState, input: CreateShipmentInput): LogisticsRo
   );
 }
 
+function resolveShipmentQuote(state: WorldState, input: CreateShipmentInput): ShipmentQuote | null {
+  const route = selectRoute(state, input);
+
+  if (!route) {
+    return null;
+  }
+
+  return quoteShipment(state, route, input.quantity, input.transportCompanyId);
+}
+
 function getTransportCompanyForRoute(state: WorldState, route: LogisticsRoute, transportCompanyId?: string): TransportCompany | null {
   const requestedCompany = transportCompanyId
     ? state.transportCompanies.find((company) => company.id === transportCompanyId)
@@ -3041,8 +3068,11 @@ interface ApplyAcceptedPlayerCommandInput {
   readonly retailOffers: MutableRetailOffer[];
   readonly retailPriceChanges: RetailPriceChange[];
   readonly licenses: MutableLicense[];
-  readonly resourcePurchases: ResourcePurchase[];
+  readonly resourcePurchases: MutableResourcePurchase[];
   readonly manualProductionRuns: ManualProductionRun[];
+  readonly shipments: MutableShipment[];
+  readonly logisticsRoutes: MutableLogisticsRoute[];
+  readonly transportCompanies: MutableTransportCompany[];
   readonly financialTransactions: FinancialTransaction[];
   readonly events: DomainEvent[];
   readonly metrics: Metric[];
@@ -3261,6 +3291,32 @@ function applyBuyLandCommand(input: ApplyAcceptedPlayerCommandInput, command: Ex
 
   input.warehouses.push(starterWarehouse);
 
+  const defaultWheatOffer = wheatProduct
+    ? input.state.resourceOffers.find((offer) => offer.productId === wheatProduct.id && offer.active) ?? null
+    : null;
+  const originWarehouse = defaultWheatOffer
+    ? input.state.warehouses.find((warehouse) => warehouse.id === defaultWheatOffer.warehouseId) ?? null
+    : null;
+  const transportCompany =
+    input.transportCompanies.find((candidate) => candidate.countryId === company.countryId && candidate.active) ??
+    input.transportCompanies.find((candidate) => candidate.active) ??
+    null;
+
+  if (originWarehouse && transportCompany) {
+    input.logisticsRoutes.push({
+      id: `${input.seed}-route-${input.tick}-${originWarehouse.id}-${starterWarehouse.id}`,
+      name: `${originWarehouse.name} -> ${starterWarehouse.name}`,
+      originWarehouseId: originWarehouse.id,
+      destinationWarehouseId: starterWarehouse.id,
+      nodeIds: [],
+      infrastructureLinkIds: [],
+      transportCompanyId: transportCompany.id,
+      mode: transportCompany.mode,
+      active: true,
+      blockedReason: null
+    });
+  }
+
   if (starterProductionPlan) {
     input.productionPlans.push(starterProductionPlan);
   }
@@ -3344,9 +3400,10 @@ function applyBuyLandCommand(input: ApplyAcceptedPlayerCommandInput, command: Ex
 function applyBuyResourceCommand(
   input: ApplyAcceptedPlayerCommandInput,
   command: Extract<PlayerCommand, { type: "BuyResourceCommand" }>
-): { readonly purchase: ResourcePurchase } {
+): { readonly purchase: ResourcePurchase; readonly shipment: Shipment | null } {
   const quantity = sanitizeQuantity(command.quantity);
   const maxUnitPriceMinor = sanitizeMoney(command.maxUnitPriceMinor);
+  const deliveryMode = command.deliveryMode ?? "pickup";
   const offer = input.state.resourceOffers.find((candidate) => candidate.id === command.resourceOfferId);
 
   if (!offer || !offer.active) {
@@ -3363,6 +3420,10 @@ function applyBuyResourceCommand(
 
   if (quantity > offer.maxQuantityPerTick) {
     throw new Error("RESOURCE_QUANTITY_EXCEEDS_OFFER_LIMIT");
+  }
+
+  if (deliveryMode !== "pickup" && deliveryMode !== "delivery") {
+    throw new Error("INVALID_RESOURCE_DELIVERY_MODE");
   }
 
   const product = input.state.products.find((candidate) => candidate.id === offer.productId);
@@ -3400,7 +3461,28 @@ function applyBuyResourceCommand(
     throw new Error("INSUFFICIENT_RESOURCE_INVENTORY");
   }
 
-  const totalPriceMinor = sanitizeMoney(offer.unitPriceMinor * quantity);
+  const goodsCostMinor = sanitizeMoney(offer.unitPriceMinor * quantity);
+  const quote = deliveryMode === "delivery"
+    ? resolveShipmentQuote(input.state, {
+        originWarehouseId: sellerWarehouse.id,
+        destinationWarehouseId: buyerWarehouse.id,
+        productId: product.id,
+        quantity,
+        routeId: command.routeId,
+        transportCompanyId: command.transportCompanyId
+      })
+    : null;
+
+  if (deliveryMode === "delivery" && !quote) {
+    throw new Error("LOGISTICS_ROUTE_REQUIRED");
+  }
+
+  if (quote?.blockedReason) {
+    throw new Error(`LOGISTICS_ROUTE_BLOCKED:${quote.blockedReason}`);
+  }
+
+  const logisticsCostMinor = quote ? sanitizeMoney(quote.costMinor) : 0;
+  const totalPriceMinor = sanitizeMoney(goodsCostMinor + logisticsCostMinor);
   const buyerAccount = getSettlementAccount(input.bankAccounts, "player", command.playerId, buyerCompany.currencyCode);
 
   if (!buyerAccount) {
@@ -3417,25 +3499,62 @@ function applyBuyResourceCommand(
     throw new Error("INSUFFICIENT_RESOURCE_INVENTORY");
   }
 
-  addInventory({
-    inventoryLots: input.inventoryLots,
-    warehouseId: buyerWarehouse.id,
-    productId: product.id,
-    quantity,
-    quality: offer.quality,
-    lotId: `${input.seed}-lot-${input.tick}-${command.commandId}-${product.id}-resource`
-  });
+  let shipment: Shipment | null = null;
+
+  if (deliveryMode === "pickup") {
+    addInventory({
+      inventoryLots: input.inventoryLots,
+      warehouseId: buyerWarehouse.id,
+      productId: product.id,
+      quantity,
+      quality: offer.quality,
+      lotId: `${input.seed}-lot-${input.tick}-${command.commandId}-${product.id}-resource`
+    });
+  } else if (quote) {
+    shipment = {
+      id: `${input.seed}-shipment-${input.tick}-${command.commandId}`,
+      originWarehouseId: sellerWarehouse.id,
+      destinationWarehouseId: buyerWarehouse.id,
+      productId: product.id,
+      quantity,
+      routeId: quote.routeId,
+      transportCompanyId: quote.transportCompanyId,
+      costMinor: logisticsCostMinor,
+      durationTicks: quote.durationTicks,
+      remainingTicks: Math.max(1, quote.durationTicks + 1),
+      risk: quote.risk,
+      status: "in_transit",
+      createdTick: input.tick,
+      departedTick: input.tick,
+      deliveredTick: null,
+      blockedReason: null
+    };
+    input.shipments.push(shipment);
+  }
 
   buyerAccount.balanceMinor = sanitizeMoney(buyerAccount.balanceMinor - totalPriceMinor);
   const sellerAccount = getSettlementAccount(input.bankAccounts, "company", sellerCompany.id, sellerCompany.currencyCode);
 
   if (sellerAccount) {
-    sellerAccount.balanceMinor = sanitizeMoney(sellerAccount.balanceMinor + totalPriceMinor);
+    sellerAccount.balanceMinor = sanitizeMoney(sellerAccount.balanceMinor + goodsCostMinor);
   }
 
-  sellerCompany.cashBalanceMinor = sanitizeMoney(sellerCompany.cashBalanceMinor + totalPriceMinor);
+  sellerCompany.cashBalanceMinor = sanitizeMoney(sellerCompany.cashBalanceMinor + goodsCostMinor);
 
-  const purchase: ResourcePurchase = {
+  if (quote && logisticsCostMinor > 0) {
+    const transportCompany = input.transportCompanies.find((candidate) => candidate.id === quote.transportCompanyId);
+    const transportAccount = transportCompany ? getSettlementAccount(input.bankAccounts, "company", transportCompany.id, buyerCompany.currencyCode) : null;
+
+    if (transportCompany) {
+      transportCompany.cashBalanceMinor = sanitizeMoney(transportCompany.cashBalanceMinor + logisticsCostMinor);
+    }
+
+    if (transportAccount) {
+      transportAccount.balanceMinor = sanitizeMoney(transportAccount.balanceMinor + logisticsCostMinor);
+    }
+  }
+
+  const purchase: MutableResourcePurchase = {
     id: `${input.seed}-resource-purchase-${input.tick}-${command.commandId}`,
     tick: input.tick,
     playerId: command.playerId,
@@ -3447,8 +3566,12 @@ function applyBuyResourceCommand(
     quantity,
     unitPriceMinor: offer.unitPriceMinor,
     totalPriceMinor,
+    goodsCostMinor,
+    logisticsCostMinor,
     quality: offer.quality,
-    status: "completed"
+    deliveryMode,
+    shipmentId: shipment?.id ?? null,
+    status: deliveryMode === "delivery" ? "in_transit" : "completed"
   };
 
   input.financialTransactions.push({
@@ -3465,51 +3588,111 @@ function applyBuyResourceCommand(
       {
         ownerType: "company",
         ownerId: sellerCompany.id,
-        amountMinor: totalPriceMinor,
+        amountMinor: goodsCostMinor,
         currencyCode: sellerCompany.currencyCode
-      }
+      },
+      ...(quote && logisticsCostMinor > 0
+        ? [
+            {
+              ownerType: "company" as const,
+              ownerId: quote.transportCompanyId,
+              amountMinor: logisticsCostMinor,
+              currencyCode: buyerCompany.currencyCode
+            }
+          ]
+        : [])
     ]
   });
+
   input.events.push({
     id: `${input.seed}-event-${input.tick}-${command.commandId}-resource-purchased`,
     tick: input.tick,
-    type: "ResourcePurchasedEvent",
-    message: `${buyerCompany.name} bought ${quantity} units of ${product.name}.`,
-    entityIds: [purchase.id, buyerCompany.id, sellerCompany.id, product.id, buyerWarehouse.id],
+    type: deliveryMode === "delivery" ? "ResourcePurchaseOrderedEvent" : "ResourcePurchasedEvent",
+    message:
+      deliveryMode === "delivery"
+        ? `${buyerCompany.name} ordered ${quantity} units of ${product.name}; shipment ${shipment?.id ?? "pending"} is in transit.`
+        : `${buyerCompany.name} bought ${quantity} units of ${product.name}.`,
+    entityIds: [purchase.id, buyerCompany.id, sellerCompany.id, product.id, buyerWarehouse.id, ...(shipment ? [shipment.id] : [])],
     metadata: {
       commandId: command.commandId,
       purchaseId: purchase.id,
+      shipmentId: shipment?.id ?? "",
+      deliveryMode,
       buyerCompanyId: buyerCompany.id,
       sellerCompanyId: sellerCompany.id,
       productId: product.id,
       quantity,
-      totalPriceMinor
+      goodsCostMinor,
+      logisticsCostMinor,
+      totalPriceMinor,
+      status: purchase.status
     }
   });
+
+  if (shipment) {
+    input.events.push({
+      id: `${input.seed}-event-${input.tick}-${command.commandId}-shipment-created`,
+      tick: input.tick,
+      type: "ShipmentCreatedEvent",
+      message: `Shipment ${shipment.id} is moving ${quantity} units of ${product.name} to ${buyerWarehouse.name}.`,
+      entityIds: [shipment.id, shipment.originWarehouseId, shipment.destinationWarehouseId, shipment.productId],
+      metadata: {
+        commandId: command.commandId,
+        purchaseId: purchase.id,
+        shipmentId: shipment.id,
+        routeId: shipment.routeId,
+        transportCompanyId: shipment.transportCompanyId,
+        status: shipment.status,
+        remainingTicks: shipment.remainingTicks
+      }
+    });
+  }
+
   input.metrics.push({
     id: `${input.seed}-metric-${input.tick}-${command.commandId}-resource-purchase`,
     tick: input.tick,
-    name: "resource.purchase.quantity",
+    name: deliveryMode === "delivery" ? "resource.purchase.ordered.quantity" : "resource.purchase.quantity",
     value: quantity,
     tags: {
       productId: product.id,
       buyerCompanyId: buyerCompany.id,
-      sellerCompanyId: sellerCompany.id
+      sellerCompanyId: sellerCompany.id,
+      deliveryMode,
+      status: purchase.status
     }
   });
+
+  if (shipment) {
+    input.metrics.push({
+      id: `${input.seed}-metric-${input.tick}-${command.commandId}-shipment-created`,
+      tick: input.tick,
+      name: "logistics.shipment.created",
+      value: quantity,
+      tags: {
+        shipmentId: shipment.id,
+        routeId: shipment.routeId,
+        productId: product.id,
+        status: shipment.status
+      }
+    });
+  }
+
   input.news.push({
     id: `${input.seed}-news-${input.tick}-${command.commandId}-resource-purchased`,
     tick: input.tick,
     category: "corporate",
     templateId: null,
-    headline: `${buyerCompany.name} secures ${product.name}`,
-    body: `${quantity} units moved from ${sellerWarehouse.name} to ${buyerWarehouse.name} through a tick command resource purchase.`,
-    severity: "info",
-    relatedEntityIds: [buyerCompany.id, sellerCompany.id, product.id],
+    headline: deliveryMode === "delivery" ? `${buyerCompany.name} orders ${product.name} shipment` : `${buyerCompany.name} secures ${product.name}`,
+    body:
+      deliveryMode === "delivery"
+        ? `${quantity} units are ordered from ${sellerWarehouse.name}; production can use them only after shipment delivery to ${buyerWarehouse.name}.`
+        : `${quantity} units moved from ${sellerWarehouse.name} to ${buyerWarehouse.name} through a local pickup resource purchase.`,
+    severity: deliveryMode === "delivery" ? "warning" : "info",
+    relatedEntityIds: [buyerCompany.id, sellerCompany.id, product.id, ...(shipment ? [shipment.id] : [])],
     reliabilityId: null
   });
 
-  return { purchase };
+  return { purchase, shipment };
 }
 
 function applyRunManualProductionCommand(
@@ -3875,6 +4058,46 @@ function validateCommand(state: WorldState, command: PlayerCommand): RejectedCom
       };
     }
 
+    if (command.deliveryMode && command.deliveryMode !== "pickup" && command.deliveryMode !== "delivery") {
+      return {
+        commandId: command.commandId,
+        code: "INVALID_RESOURCE_DELIVERY_MODE",
+        message: "Resource purchase deliveryMode must be pickup or delivery."
+      };
+    }
+
+    if (command.deliveryMode === "delivery") {
+      const buyerWarehouse = command.buyerWarehouseId
+        ? state.warehouses.find((warehouse) => warehouse.id === command.buyerWarehouseId && warehouse.companyId === buyerCompany.id)
+        : state.warehouses.find((warehouse) => warehouse.companyId === buyerCompany.id);
+      const quote = buyerWarehouse
+        ? resolveShipmentQuote(state, {
+            originWarehouseId: offer.warehouseId,
+            destinationWarehouseId: buyerWarehouse.id,
+            productId: offer.productId,
+            quantity,
+            routeId: command.routeId,
+            transportCompanyId: command.transportCompanyId
+          })
+        : null;
+
+      if (!quote) {
+        return {
+          commandId: command.commandId,
+          code: "LOGISTICS_ROUTE_REQUIRED",
+          message: "Delivery resource purchase requires an available logistics route."
+        };
+      }
+
+      if (quote.blockedReason) {
+        return {
+          commandId: command.commandId,
+          code: "LOGISTICS_ROUTE_BLOCKED",
+          message: `Delivery route is blocked: ${quote.blockedReason}`
+        };
+      }
+    }
+
     return null;
   }
 
@@ -3899,12 +4122,53 @@ function validateCommand(state: WorldState, command: PlayerCommand): RejectedCom
       };
     }
 
-    return requestedQuantity > 0
+    if (requestedQuantity <= 0) {
+      return {
+        commandId: command.commandId,
+        code: "INVALID_PRODUCTION_QUANTITY",
+        message: "Manual production quantity must be positive."
+      };
+    }
+
+    const warehouse = state.warehouses.find((candidate) => candidate.id === plan.warehouseId && candidate.companyId === company.id);
+
+    if (!warehouse) {
+      return {
+        commandId: command.commandId,
+        code: "PRODUCTION_WAREHOUSE_REQUIRED",
+        message: "Manual production requires the company's production warehouse."
+      };
+    }
+
+    const inputProductIds = new Set(plan.inputs.map((productionInput) => productionInput.productId));
+    const inboundInputShipments = state.shipments.filter(
+      (shipment) =>
+        shipment.status === "in_transit" &&
+        shipment.destinationWarehouseId === plan.warehouseId &&
+        inputProductIds.has(shipment.productId)
+    );
+
+    if (inboundInputShipments.length > 0) {
+      return {
+        commandId: command.commandId,
+        code: "INPUT_SHIPMENT_IN_TRANSIT",
+        message: "Manual production is blocked until inbound input shipments are delivered."
+      };
+    }
+
+    const outputLimit = sanitizeQuantity(Math.min(requestedQuantity, plan.outputQuantityPerTick));
+    const maxOutputByInputs = plan.inputs.reduce((maxOutput, productionInput) => {
+      const available = getAvailableQuantity(state.inventoryLots, plan.warehouseId, productionInput.productId);
+      const inputLimitedOutput = productionInput.quantityPerOutput > 0 ? Math.floor(available / productionInput.quantityPerOutput) : maxOutput;
+      return Math.min(maxOutput, inputLimitedOutput);
+    }, outputLimit);
+
+    return maxOutputByInputs > 0
       ? null
       : {
           commandId: command.commandId,
-          code: "INVALID_PRODUCTION_QUANTITY",
-          message: "Manual production quantity must be positive."
+          code: "INSUFFICIENT_PRODUCTION_INPUTS",
+          message: "Manual production requires delivered input inventory in the production warehouse."
         };
   }
 
@@ -4960,6 +5224,7 @@ interface LogisticsContext {
   readonly state: WorldState;
   readonly shipments: MutableShipment[];
   readonly inventoryLots: MutableInventoryLot[];
+  readonly resourcePurchases: MutableResourcePurchase[];
   readonly nextTick: number;
   readonly seed: string;
   readonly events: DomainEvent[];
@@ -4976,8 +5241,14 @@ function processLogistics(context: LogisticsContext): void {
     const quote = route ? quoteShipment(context.state, route, shipment.quantity, shipment.transportCompanyId) : null;
 
     if (!route || quote?.blockedReason) {
+      const linkedPurchase = context.resourcePurchases.find((purchase) => purchase.shipmentId === shipment.id) ?? null;
       shipment.status = "blocked";
       shipment.blockedReason = quote?.blockedReason ?? "Route no longer exists.";
+
+      if (linkedPurchase) {
+        linkedPurchase.status = "failed";
+      }
+
       context.events.push({
         id: `${context.seed}-event-${context.nextTick}-${shipment.id}-blocked`,
         tick: context.nextTick,
@@ -4986,6 +5257,7 @@ function processLogistics(context: LogisticsContext): void {
         entityIds: [shipment.id, shipment.routeId],
         metadata: {
           shipmentId: shipment.id,
+          purchaseId: linkedPurchase?.id ?? "",
           routeId: shipment.routeId,
           reason: shipment.blockedReason
         }
@@ -5011,9 +5283,14 @@ function processLogistics(context: LogisticsContext): void {
     }
 
     const product = context.state.products.find((candidate) => candidate.id === shipment.productId);
+    const linkedPurchase = context.resourcePurchases.find((purchase) => purchase.shipmentId === shipment.id) ?? null;
     shipment.status = "delivered";
     shipment.remainingTicks = 0;
     shipment.deliveredTick = context.nextTick;
+
+    if (linkedPurchase) {
+      linkedPurchase.status = "delivered";
+    }
 
     addInventory({
       inventoryLots: context.inventoryLots,
@@ -5032,6 +5309,7 @@ function processLogistics(context: LogisticsContext): void {
       entityIds: [shipment.id, shipment.destinationWarehouseId, shipment.productId],
       metadata: {
         shipmentId: shipment.id,
+        purchaseId: linkedPurchase?.id ?? "",
         destinationWarehouseId: shipment.destinationWarehouseId,
         productId: shipment.productId,
         quantity: shipment.quantity
@@ -9642,7 +9920,12 @@ function normalizeWorldState(state: WorldState): WorldState {
       quantity: sanitizeQuantity(purchase.quantity),
       unitPriceMinor: sanitizeMoney(purchase.unitPriceMinor),
       totalPriceMinor: sanitizeMoney(purchase.totalPriceMinor),
-      quality: clamp(purchase.quality, 0, 1)
+      goodsCostMinor: sanitizeMoney(purchase.goodsCostMinor ?? purchase.totalPriceMinor),
+      logisticsCostMinor: sanitizeMoney(purchase.logisticsCostMinor ?? 0),
+      quality: clamp(purchase.quality, 0, 1),
+      deliveryMode: purchase.deliveryMode ?? "pickup",
+      shipmentId: purchase.shipmentId ?? null,
+      status: purchase.status ?? "completed"
     })),
     manualProductionRuns: (state.manualProductionRuns ?? []).map((run) => ({
       ...run,
@@ -10083,6 +10366,8 @@ export function assertNoInvalidEconomyValues(state: WorldState): void {
     check(`resourcePurchase.${purchase.id}.quantity`, purchase.quantity);
     check(`resourcePurchase.${purchase.id}.unitPriceMinor`, purchase.unitPriceMinor);
     check(`resourcePurchase.${purchase.id}.totalPriceMinor`, purchase.totalPriceMinor);
+    check(`resourcePurchase.${purchase.id}.goodsCostMinor`, purchase.goodsCostMinor);
+    check(`resourcePurchase.${purchase.id}.logisticsCostMinor`, purchase.logisticsCostMinor);
     check(`resourcePurchase.${purchase.id}.quality`, purchase.quality);
   }
 

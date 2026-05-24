@@ -117,6 +117,7 @@ export function GameClient() {
   const [companyName, setCompanyName] = useState("");
   const [resourcePurchaseQuantity, setResourcePurchaseQuantity] = useState("1000");
   const [resourceMaxPriceMinor, setResourceMaxPriceMinor] = useState("100");
+  const [resourceDeliveryMode, setResourceDeliveryMode] = useState<"pickup" | "delivery">("delivery");
   const [productionQuantity, setProductionQuantity] = useState("500");
   const [retailPriceMinor, setRetailPriceMinor] = useState("250");
   const [loanAmountMinor, setLoanAmountMinor] = useState("5000000");
@@ -359,9 +360,24 @@ export function GameClient() {
     const quantity = Number.parseInt(resourcePurchaseQuantity, 10);
     const maxUnitPriceMinor = Number.parseInt(resourceMaxPriceMinor, 10);
     const buyerWarehouse = data?.warehouses.find((warehouse) => warehouse.companyId === companyId) ?? null;
+    const deliveryRoute =
+      resourceDeliveryMode === "delivery" && offer && buyerWarehouse
+        ? data?.logisticsRoutes.find(
+            (route) =>
+              route.originWarehouseId === offer.warehouseId &&
+              route.destinationWarehouseId === buyerWarehouse.id &&
+              route.active &&
+              !route.blockedReason
+          ) ?? null
+        : null;
 
     if (!companyId || !offer || !buyerWarehouse || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(maxUnitPriceMinor) || maxUnitPriceMinor <= 0) {
       setError("Resource purchase needs a player company, warehouse, resource offer, quantity, and max price.");
+      return;
+    }
+
+    if (resourceDeliveryMode === "delivery" && !deliveryRoute) {
+      setError("Delivery mode needs an active route from the seller warehouse to your company warehouse.");
       return;
     }
 
@@ -374,9 +390,16 @@ export function GameClient() {
         resourceOfferId: offer.id,
         quantity,
         maxUnitPriceMinor,
-        buyerWarehouseId: buyerWarehouse.id
+        buyerWarehouseId: buyerWarehouse.id,
+        deliveryMode: resourceDeliveryMode,
+        routeId: deliveryRoute?.id,
+        transportCompanyId: deliveryRoute?.transportCompanyId
       });
-      setNotice(`Bought ${formatCompactNumber(purchase.quantity)} units of ${offer.productName}.`);
+      setNotice(
+        purchase.deliveryMode === "delivery"
+          ? `Ordered ${formatCompactNumber(purchase.quantity)} units of ${offer.productName}; shipment ${purchase.shipment?.status ?? "in transit"}. Production unlocks after delivery.`
+          : `Bought ${formatCompactNumber(purchase.quantity)} units of ${offer.productName} by pickup.`
+      );
       await refreshWorld(false);
     } catch (purchaseError) {
       setError(formatApiError(purchaseError));
@@ -804,6 +827,7 @@ export function GameClient() {
             maxUnitPriceMinor={resourceMaxPriceMinor}
             productionQuantity={productionQuantity}
             retailPriceMinor={retailPriceMinor}
+            resourceDeliveryMode={resourceDeliveryMode}
             resourceQuantity={resourcePurchaseQuantity}
             selectedCompanyId={selectedOperationsCompanyId}
             selectedResourceOfferId={selectedResourceOfferId}
@@ -811,6 +835,7 @@ export function GameClient() {
             onMaxUnitPriceChange={setResourceMaxPriceMinor}
             onProductionQuantityChange={setProductionQuantity}
             onRetailPriceChange={setRetailPriceMinor}
+            onResourceDeliveryModeChange={setResourceDeliveryMode}
             onResourceQuantityChange={setResourcePurchaseQuantity}
             onResourceOfferChange={(offerId) => {
               const offer = data?.resourceOffers.find((candidate) => candidate.id === offerId) ?? null;
@@ -2731,12 +2756,14 @@ function OperationsPanel({
   onPurchaseLand,
   onRetailPriceChange,
   onResourceOfferChange,
+  onResourceDeliveryModeChange,
   onResourceQuantityChange,
   onRunProduction,
   onSetRetailPrice,
   onSubmitPurchase,
   productionQuantity,
   retailPriceMinor,
+  resourceDeliveryMode,
   resourceQuantity,
   selectedCompanyId,
   selectedResourceOfferId
@@ -2753,12 +2780,14 @@ function OperationsPanel({
   readonly onPurchaseLand: (event: FormEvent<HTMLFormElement>) => void;
   readonly onRetailPriceChange: (value: string) => void;
   readonly onResourceOfferChange: (offerId: string) => void;
+  readonly onResourceDeliveryModeChange: (value: "pickup" | "delivery") => void;
   readonly onResourceQuantityChange: (value: string) => void;
   readonly onRunProduction: (event: FormEvent<HTMLFormElement>) => void;
   readonly onSetRetailPrice: (event: FormEvent<HTMLFormElement>) => void;
   readonly onSubmitPurchase: (event: FormEvent<HTMLFormElement>) => void;
   readonly productionQuantity: string;
   readonly retailPriceMinor: string;
+  readonly resourceDeliveryMode: "pickup" | "delivery";
   readonly resourceQuantity: string;
   readonly selectedCompanyId: string | null;
   readonly selectedResourceOfferId: string | null;
@@ -2790,6 +2819,24 @@ function OperationsPanel({
       .filter((entry) => entry.ownerType === "company" && entry.ownerId === selectedCompany?.id && entry.amountMinor > 0)
       .reduce((total, entry) => total + entry.amountMinor, 0) ?? 0;
   const selectedOffer = data?.resourceOffers.find((offer) => offer.id === selectedResourceOfferId) ?? data?.resourceOffers[0] ?? null;
+  const inboundShipments =
+    data?.shipments.filter(
+      (shipment) =>
+        shipment.status === "in_transit" &&
+        companyWarehouses.some((warehouse) => warehouse.id === shipment.destinationWarehouseId) &&
+        (!productionPlan || productionPlan.inputs.some((input) => input.productId === shipment.productId))
+    ) ?? [];
+  const deliveryRoute =
+    data && selectedOffer && companyWarehouses.length > 0
+      ? data.logisticsRoutes.find(
+          (route) =>
+            route.originWarehouseId === selectedOffer.warehouseId &&
+            companyWarehouses.some((warehouse) => warehouse.id === route.destinationWarehouseId) &&
+            route.active &&
+            !route.blockedReason
+        ) ?? null
+      : null;
+  const productionBlockedByInbound = inboundShipments.length > 0;
   const lastPurchase = data?.resourcePurchases.at(-1) ?? null;
   const lastRun = data?.productionRuns.at(-1) ?? null;
 
@@ -2849,6 +2896,25 @@ function OperationsPanel({
                         ))}
                       </select>
                     </label>
+                    <label className="grid gap-1 text-sm text-stone-300">
+                      Delivery
+                      <select
+                        aria-label="Resource delivery mode"
+                        className="min-h-10 rounded-md border border-[#344239] bg-[#0d130f] px-3 text-stone-50 outline-none transition focus:border-economy-gold"
+                        onChange={(event) => onResourceDeliveryModeChange(event.target.value as "pickup" | "delivery")}
+                        value={resourceDeliveryMode}
+                      >
+                        <option value="pickup">pickup/direct — local instant stock</option>
+                        <option value="delivery">delivery — shipment first</option>
+                      </select>
+                    </label>
+                    {resourceDeliveryMode === "delivery" ? (
+                      <p className="rounded-md border border-economy-gold/40 bg-economy-gold/10 p-2 text-xs text-stone-300">
+                        {deliveryRoute
+                          ? `Route ready: ${deliveryRoute.name}. Inventory becomes available only after shipment delivery.`
+                          : "No active route to your warehouse yet. Use pickup or create a route later."}
+                      </p>
+                    ) : null}
                     <div className="grid grid-cols-2 gap-2">
                       <label className="grid gap-1 text-sm text-stone-300">
                         Quantity
@@ -2873,7 +2939,7 @@ function OperationsPanel({
                     </div>
                     <button
                       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-economy-gold/70 bg-economy-gold px-3 text-sm font-bold text-[#17110a] transition hover:bg-[#efc46c] disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isPurchasingResource || !companyHasPremise}
+                      disabled={isPurchasingResource || !companyHasPremise || (resourceDeliveryMode === "delivery" && !deliveryRoute)}
                       type="submit"
                     >
                       {isPurchasingResource ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ShoppingBasket className="h-4 w-4" aria-hidden="true" />}
@@ -2905,12 +2971,17 @@ function OperationsPanel({
                     </label>
                     <button
                       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-economy-teal/70 bg-economy-teal px-3 text-sm font-bold text-[#06110f] transition hover:bg-[#6bcbbb] disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isRunningProduction || !companyHasPremise}
+                      disabled={isRunningProduction || !companyHasPremise || productionBlockedByInbound}
                       type="submit"
                     >
                       {isRunningProduction ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Factory className="h-4 w-4" aria-hidden="true" />}
                       Produce
                     </button>
+                    {productionBlockedByInbound ? (
+                      <p className="rounded-md border border-economy-gold/40 bg-economy-gold/10 p-2 text-xs text-stone-300">
+                        Production is blocked: {inboundShipments.length} input shipment(s) are still in transit. Run ticks until status becomes delivered.
+                      </p>
+                    ) : null}
                   </>
                 ) : (
                   <EmptyState>Купите или арендуйте помещение, чтобы открыть starter recipe.</EmptyState>
@@ -2980,7 +3051,11 @@ function OperationsPanel({
                 <SubPanelTitle icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />} title="Last Action" />
                 {lastPurchase || lastRun || lastPriceChange ? (
                   <div className="mt-2 grid gap-2 text-xs text-stone-300">
-                    {lastPurchase ? <p>Purchase: {formatCompactNumber(lastPurchase.quantity)} units for {formatMoneyMinor(lastPurchase.totalPriceMinor)}.</p> : null}
+                    {lastPurchase ? (
+                      <p>
+                        Purchase: {formatCompactNumber(lastPurchase.quantity)} units for {formatMoneyMinor(lastPurchase.totalPriceMinor)} ({lastPurchase.deliveryMode}, {lastPurchase.status}).
+                      </p>
+                    ) : null}
                     {lastRun ? <p>Production: {formatCompactNumber(lastRun.producedQuantity)} units completed.</p> : null}
                     {lastPriceChange ? (
                       <p>

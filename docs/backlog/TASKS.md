@@ -11,11 +11,12 @@ This file is the short operational queue for autonomous vertical slices.
 - [x] `P1-TASK-20260524-0027-normalized-prisma-hydration.md` - Prisma read path now hydrates key player-loop entities from normalized tables, persists finance/news/explainability rows, exposes consistency status, and keeps snapshots as fallback.
 - [x] `P1-TASK-20260524-0028-real-auth-rbac-session.md` - API now resolves user/session/player binding through auth repositories, rejects forged player identity, and protects developer/admin debug routes with RBAC.
 - [x] `P1-TASK-20260524-0029-command-batch-dependencies.md` - `/simulation/tick` now supports dependent command batches with temporary refs, deterministic dependency ordering, all-or-nothing rollback, partial mode, and command results.
+- [x] `P1-TASK-20260524-0032-player-resource-logistics-delivery-loop.md` - player resource purchases now support pickup/direct and shipment delivery modes; in-transit resources cannot be used for production until delivered.
 
 ## Next
 
-1. `P1-TASK-20260524-0032-player-resource-logistics-delivery-loop.md` - make player resource purchases create shipments/reservations before inventory becomes usable.
-2. `P1-TASK-20260524-0033-player-margin-accounting.md` - track input cost, production quantity, retail revenue, gross margin, and simple profit/loss for player operations.
-3. `P1-TASK-20260524-0034-first-business-onboarding-ui.md` - turn the player operations panel into a guided first-business stepper with disabled-state reasons and action result summaries.
-4. `P2-TASK-ui-operation-guidance` - add compact contextual hints and disabled-state reasons in Player Operations.
+1. `P1-TASK-20260524-0033-player-margin-accounting.md` - track input cost, production quantity, retail revenue, gross margin, and simple profit/loss for player operations.
+2. `P1-TASK-20260524-0034-first-business-onboarding-ui.md` - turn the player operations panel into a guided first-business stepper with disabled-state reasons and action result summaries.
+3. `P1-TASK-20260524-0035-land-premise-lease-model.md` - split land, premise/building, lease and purchase into a clearer domain model.
+4. `P1-TASK-20260524-0036-seed-scale-balance-v1.md` - expand the seed world toward prototype scale after player-loop accounting is stable.
 5. `P2-TASK-operation-analytics` - chart resource spend, production output, retail revenue, and margin after player sales.

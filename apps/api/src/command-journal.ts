@@ -31,6 +31,7 @@ export interface CommandExecutionResult {
   readonly productionPlanId: string | null;
   readonly retailOfferId: string | null;
   readonly resourcePurchaseId: string | null;
+  readonly shipmentId: string | null;
   readonly productionRunId: string | null;
   readonly retailPriceChangeId: string | null;
   readonly eventIds: readonly string[];
@@ -735,7 +736,7 @@ function buildCommandResults(state: WorldState, records: readonly PlayerCommandR
     const linkedEvents = state.events.filter((event) => record.resultEventIds.includes(event.id));
     const companyEvent = linkedEvents.find((event) => event.type === "CompanyRegisteredEvent") ?? null;
     const premiseEvent = linkedEvents.find((event) => event.type === "LandPremiseAcquiredEvent") ?? null;
-    const purchaseEvent = linkedEvents.find((event) => event.type === "ResourcePurchasedEvent") ?? null;
+    const purchaseEvent = linkedEvents.find((event) => event.type === "ResourcePurchasedEvent" || event.type === "ResourcePurchaseOrderedEvent") ?? null;
     const productionEvent = linkedEvents.find((event) => event.type === "ManualProductionRunEvent") ?? null;
     const priceEvent = linkedEvents.find((event) => event.type === "RetailPriceChangedEvent") ?? null;
 
@@ -752,6 +753,7 @@ function buildCommandResults(state: WorldState, records: readonly PlayerCommandR
       productionPlanId: readMetadataString(premiseEvent, "productionPlanId"),
       retailOfferId: readMetadataString(premiseEvent, "retailOfferId"),
       resourcePurchaseId: readMetadataString(purchaseEvent, "purchaseId"),
+      shipmentId: readMetadataString(purchaseEvent, "shipmentId"),
       productionRunId: readMetadataString(productionEvent, "productionRunId"),
       retailPriceChangeId: readMetadataString(priceEvent, "priceChangeId"),
       eventIds: record.resultEventIds,

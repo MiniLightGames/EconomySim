@@ -20,6 +20,7 @@ import type {
   ResourcePurchase,
   RetailOffer,
   RetailPriceChange,
+  Shipment,
   Warehouse,
   WorldState
 } from "@economysim/domain";
@@ -123,6 +124,7 @@ export interface PrismaClientLike {
   readonly inventoryLot?: PrismaReadWriteDelegate;
   readonly resourceOffer?: PrismaReadWriteDelegate;
   readonly resourcePurchase?: PrismaReadWriteDelegate;
+  readonly shipment?: PrismaReadWriteDelegate;
   readonly manualProductionRun?: PrismaReadWriteDelegate;
   readonly retailPriceChange?: PrismaReadWriteDelegate;
   readonly financialTransaction?: PrismaReadWriteDelegate;
@@ -438,6 +440,47 @@ async function persistNormalizedWorldState(prisma: PrismaClientLike, state: Worl
     });
   }
 
+  for (const shipment of state.shipments) {
+    await prisma.shipment?.upsert?.({
+      where: { id: shipment.id },
+      update: {
+        originWarehouseId: shipment.originWarehouseId,
+        destinationWarehouseId: shipment.destinationWarehouseId,
+        productId: shipment.productId,
+        quantity: shipment.quantity,
+        routeId: shipment.routeId,
+        transportCompanyId: shipment.transportCompanyId,
+        costMinor: BigInt(shipment.costMinor),
+        durationTicks: shipment.durationTicks,
+        remainingTicks: shipment.remainingTicks,
+        risk: shipment.risk,
+        status: shipment.status,
+        createdTick: shipment.createdTick,
+        departedTick: shipment.departedTick,
+        deliveredTick: shipment.deliveredTick,
+        blockedReason: shipment.blockedReason
+      },
+      create: {
+        id: shipment.id,
+        originWarehouseId: shipment.originWarehouseId,
+        destinationWarehouseId: shipment.destinationWarehouseId,
+        productId: shipment.productId,
+        quantity: shipment.quantity,
+        routeId: shipment.routeId,
+        transportCompanyId: shipment.transportCompanyId,
+        costMinor: BigInt(shipment.costMinor),
+        durationTicks: shipment.durationTicks,
+        remainingTicks: shipment.remainingTicks,
+        risk: shipment.risk,
+        status: shipment.status,
+        createdTick: shipment.createdTick,
+        departedTick: shipment.departedTick,
+        deliveredTick: shipment.deliveredTick,
+        blockedReason: shipment.blockedReason
+      }
+    });
+  }
+
   for (const purchase of state.resourcePurchases) {
     await prisma.resourcePurchase?.upsert?.({
       where: { id: purchase.id },
@@ -452,7 +495,11 @@ async function persistNormalizedWorldState(prisma: PrismaClientLike, state: Worl
         quantity: purchase.quantity,
         unitPriceMinor: BigInt(purchase.unitPriceMinor),
         totalPriceMinor: BigInt(purchase.totalPriceMinor),
+        goodsCostMinor: BigInt(purchase.goodsCostMinor),
+        logisticsCostMinor: BigInt(purchase.logisticsCostMinor),
         quality: purchase.quality,
+        deliveryMode: purchase.deliveryMode,
+        shipmentId: purchase.shipmentId,
         status: purchase.status
       },
       create: {
@@ -467,7 +514,11 @@ async function persistNormalizedWorldState(prisma: PrismaClientLike, state: Worl
         quantity: purchase.quantity,
         unitPriceMinor: BigInt(purchase.unitPriceMinor),
         totalPriceMinor: BigInt(purchase.totalPriceMinor),
+        goodsCostMinor: BigInt(purchase.goodsCostMinor),
+        logisticsCostMinor: BigInt(purchase.logisticsCostMinor),
         quality: purchase.quality,
+        deliveryMode: purchase.deliveryMode,
+        shipmentId: purchase.shipmentId,
         status: purchase.status
       }
     });
@@ -809,6 +860,7 @@ interface NormalizedReadModel {
   readonly productionPlans: readonly ProductionPlan[];
   readonly retailOffers: readonly RetailOffer[];
   readonly resourceOffers: readonly ResourceOffer[];
+  readonly shipments: readonly Shipment[];
   readonly resourcePurchases: readonly ResourcePurchase[];
   readonly manualProductionRuns: readonly ManualProductionRun[];
   readonly retailPriceChanges: readonly RetailPriceChange[];
@@ -843,6 +895,7 @@ async function hydrateWorldFromNormalizedReadModel(prisma: PrismaClientLike, sna
       productionPlans: mergeById(snapshotState.productionPlans, normalized.productionPlans),
       retailOffers: mergeById(snapshotState.retailOffers, normalized.retailOffers),
       resourceOffers: mergeById(snapshotState.resourceOffers ?? [], normalized.resourceOffers),
+      shipments: mergeById(snapshotState.shipments ?? [], normalized.shipments),
       resourcePurchases: mergeById(snapshotState.resourcePurchases ?? [], normalized.resourcePurchases),
       manualProductionRuns: mergeById(snapshotState.manualProductionRuns ?? [], normalized.manualProductionRuns),
       retailPriceChanges: mergeById(snapshotState.retailPriceChanges ?? [], normalized.retailPriceChanges),
@@ -869,6 +922,7 @@ async function collectNormalizedReadModel(prisma: PrismaClientLike): Promise<Nor
   const productionPlans = mapRows(await readRows(prisma.productionPlan, "productionPlans", {}), toProductionPlan);
   const retailOffers = mapRows(await readRows(prisma.retailOffer, "retailOffers", {}), toRetailOffer);
   const resourceOffers = mapRows(await readRows(prisma.resourceOffer, "resourceOffers", {}), toResourceOffer);
+  const shipments = mapRows(await readRows(prisma.shipment, "shipments", { orderBy: [{ createdTick: "asc" }, { id: "asc" }] }), toShipment);
   const resourcePurchases = mapRows(await readRows(prisma.resourcePurchase, "resourcePurchases", { orderBy: [{ tick: "asc" }, { id: "asc" }] }), toResourcePurchase);
   const manualProductionRuns = mapRows(await readRows(prisma.manualProductionRun, "manualProductionRuns", { orderBy: [{ tick: "asc" }, { id: "asc" }] }), toManualProductionRun);
   const retailPriceChanges = mapRows(await readRows(prisma.retailPriceChange, "retailPriceChanges", { orderBy: [{ tick: "asc" }, { id: "asc" }] }), toRetailPriceChange);
@@ -896,6 +950,7 @@ async function collectNormalizedReadModel(prisma: PrismaClientLike): Promise<Nor
     tupleSource("productionPlans", productionPlans),
     tupleSource("retailOffers", retailOffers),
     tupleSource("resourceOffers", resourceOffers),
+    tupleSource("shipments", shipments),
     tupleSource("resourcePurchases", resourcePurchases),
     tupleSource("manualProductionRuns", manualProductionRuns),
     tupleSource("retailPriceChanges", retailPriceChanges),
@@ -910,6 +965,7 @@ async function collectNormalizedReadModel(prisma: PrismaClientLike): Promise<Nor
     tupleSource("auditLogs", auditLogs)
   ].filter((source): source is string => Boolean(source));
   const latestTick = maxNullable([
+    ...shipments.map((item) => item.deliveredTick ?? item.departedTick ?? item.createdTick),
     ...resourcePurchases.map((item) => item.tick),
     ...manualProductionRuns.map((item) => item.tick),
     ...retailPriceChanges.map((item) => item.tick),
@@ -933,6 +989,7 @@ async function collectNormalizedReadModel(prisma: PrismaClientLike): Promise<Nor
     productionPlans,
     retailOffers,
     resourceOffers,
+    shipments,
     resourcePurchases,
     manualProductionRuns,
     retailPriceChanges,
@@ -1139,6 +1196,27 @@ function toResourceOffer(row: Record<string, unknown>): ResourceOffer {
   };
 }
 
+function toShipment(row: Record<string, unknown>): Shipment {
+  return {
+    id: stringField(row, "id"),
+    originWarehouseId: stringField(row, "originWarehouseId"),
+    destinationWarehouseId: stringField(row, "destinationWarehouseId"),
+    productId: stringField(row, "productId"),
+    quantity: numberField(row, "quantity"),
+    routeId: stringField(row, "routeId"),
+    transportCompanyId: stringField(row, "transportCompanyId"),
+    costMinor: numberField(row, "costMinor"),
+    durationTicks: numberField(row, "durationTicks"),
+    remainingTicks: numberField(row, "remainingTicks"),
+    risk: numberField(row, "risk"),
+    status: stringField(row, "status") as Shipment["status"],
+    createdTick: numberField(row, "createdTick"),
+    departedTick: nullableNumber(row, "departedTick"),
+    deliveredTick: nullableNumber(row, "deliveredTick"),
+    blockedReason: nullableString(row, "blockedReason")
+  };
+}
+
 function toResourcePurchase(row: Record<string, unknown>): ResourcePurchase {
   return {
     id: stringField(row, "id"),
@@ -1152,7 +1230,11 @@ function toResourcePurchase(row: Record<string, unknown>): ResourcePurchase {
     quantity: numberField(row, "quantity"),
     unitPriceMinor: numberField(row, "unitPriceMinor"),
     totalPriceMinor: numberField(row, "totalPriceMinor"),
+    goodsCostMinor: nullableNumber(row, "goodsCostMinor") ?? numberField(row, "totalPriceMinor"),
+    logisticsCostMinor: nullableNumber(row, "logisticsCostMinor") ?? 0,
     quality: numberField(row, "quality"),
+    deliveryMode: (nullableString(row, "deliveryMode") ?? "pickup") as ResourcePurchase["deliveryMode"],
+    shipmentId: nullableString(row, "shipmentId"),
     status: stringField(row, "status") as ResourcePurchase["status"]
   };
 }
@@ -1409,7 +1491,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function upgradeWorldState(state: WorldState, seed: string): WorldState {
   const retailPriceChanges = state.retailPriceChanges ?? [];
   const resourceOffers = state.resourceOffers ?? [];
-  const resourcePurchases = state.resourcePurchases ?? [];
+  const resourcePurchases = (state.resourcePurchases ?? []).map((purchase) => ({
+    ...purchase,
+    goodsCostMinor: purchase.goodsCostMinor ?? purchase.totalPriceMinor,
+    logisticsCostMinor: purchase.logisticsCostMinor ?? 0,
+    deliveryMode: purchase.deliveryMode ?? "pickup",
+    shipmentId: purchase.shipmentId ?? null,
+    status: purchase.status ?? "completed"
+  }));
   const manualProductionRuns = state.manualProductionRuns ?? [];
   const financialTransactions = state.financialTransactions ?? [];
   const news = state.news ?? [];

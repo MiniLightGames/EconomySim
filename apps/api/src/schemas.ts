@@ -50,7 +50,10 @@ export const buyResourceCommandSchema = z.object({
   resourceOfferId: z.string().trim().min(1).max(160),
   quantity: z.number().int().positive().max(1_000_000_000),
   maxUnitPriceMinor: z.number().int().positive().max(10_000_000_000),
-  buyerWarehouseId: z.string().trim().min(1).max(160).optional()
+  buyerWarehouseId: z.string().trim().min(1).max(160).optional(),
+  deliveryMode: z.enum(["pickup", "delivery"]).default("pickup"),
+  routeId: z.string().trim().min(1).max(160).optional(),
+  transportCompanyId: z.string().trim().min(1).max(160).optional()
 });
 
 export const runManualProductionCommandSchema = z.object({
@@ -101,7 +104,10 @@ export const resourcePurchaseBodySchema = z.object({
   resourceOfferId: z.string().trim().min(1).max(160),
   quantity: z.number().int().positive().max(1_000_000_000),
   maxUnitPriceMinor: z.number().int().positive().max(10_000_000_000),
-  buyerWarehouseId: z.string().trim().min(1).max(160).optional()
+  buyerWarehouseId: z.string().trim().min(1).max(160).optional(),
+  deliveryMode: z.enum(["pickup", "delivery"]).default("pickup"),
+  routeId: z.string().trim().min(1).max(160).optional(),
+  transportCompanyId: z.string().trim().min(1).max(160).optional()
 });
 
 export const manualProductionBodySchema = z.object({
