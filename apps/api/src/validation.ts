@@ -47,6 +47,41 @@ export function validatePlayerCommandsAgainstWorld(state: WorldState, commands: 
           companyId: command.companyId
         });
       }
+
+      const premise = state.premises.find((candidate) => candidate.id === (command.premiseId ?? command.lotId));
+      const landParcel = state.landParcels.find((candidate) => candidate.id === (command.landParcelId ?? premise?.landParcelId ?? command.lotId));
+      const zoning = premise?.zoning ?? landParcel?.zoning;
+
+      if (landParcel && city && (landParcel.cityId !== city.id || landParcel.countryId !== city.countryId)) {
+        throw badRequest("LAND_CITY_COUNTRY_MISMATCH", "BuyLandCommand selected land must match the target city and country.", {
+          commandId: command.commandId,
+          landParcelId: landParcel.id,
+          cityId: city.id
+        });
+      }
+
+      if (landParcel && landParcel.status !== "available") {
+        throw badRequest("LAND_PARCEL_NOT_AVAILABLE", "BuyLandCommand selected land parcel is not available.", {
+          commandId: command.commandId,
+          landParcelId: landParcel.id,
+          status: landParcel.status
+        });
+      }
+
+      if (premise && premise.status !== "available") {
+        throw badRequest("PREMISE_NOT_AVAILABLE", "BuyLandCommand selected premise is not available.", {
+          commandId: command.commandId,
+          premiseId: premise.id,
+          status: premise.status
+        });
+      }
+
+      if (zoning && zoning !== "commercial" && zoning !== "industrial" && zoning !== "mixed") {
+        throw badRequest("ZONING_NOT_ALLOWED", "Starter business requires commercial, industrial, or mixed zoning.", {
+          commandId: command.commandId,
+          zoning
+        });
+      }
     }
 
     if (command.type === "BuyResourceCommand") {

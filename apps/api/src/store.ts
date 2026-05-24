@@ -10,10 +10,12 @@ import type {
   FinancialEntry,
   FinancialTransaction,
   InventoryLot,
+  LandParcel,
   ManualProductionRun,
   Metric,
   NewsItem,
   PlayerCommandRecord,
+  Premise,
   ProductionInput,
   ProductionPlan,
   ResourceOffer,
@@ -119,6 +121,8 @@ export interface PrismaClientLike {
   readonly warehouse?: PrismaReadWriteDelegate;
   readonly bankAccount?: PrismaReadWriteDelegate;
   readonly creditScore?: PrismaReadWriteDelegate;
+  readonly landParcel?: PrismaReadWriteDelegate;
+  readonly premise?: PrismaReadWriteDelegate;
   readonly productionPlan?: PrismaReadWriteDelegate;
   readonly retailOffer?: PrismaReadWriteDelegate;
   readonly inventoryLot?: PrismaReadWriteDelegate;
@@ -323,6 +327,80 @@ async function persistNormalizedWorldState(prisma: PrismaClientLike, state: Worl
         score: score.score,
         probabilityOfDefault: score.probabilityOfDefault,
         lastUpdatedTick: score.lastUpdatedTick
+      }
+    });
+  }
+
+  for (const parcel of state.landParcels ?? []) {
+    await prisma.landParcel?.upsert?.({
+      where: { id: parcel.id },
+      update: {
+        cityId: parcel.cityId,
+        countryId: parcel.countryId,
+        name: parcel.name,
+        zoning: parcel.zoning,
+        ownerType: parcel.ownerType,
+        ownerId: parcel.ownerId,
+        status: parcel.status,
+        marketPriceMinor: BigInt(parcel.marketPriceMinor),
+        monthlyRentMinor: BigInt(parcel.monthlyRentMinor),
+        maintenanceMinorPerMonth: BigInt(parcel.maintenanceMinorPerMonth),
+        infrastructureScore: parcel.infrastructureScore,
+        allowedBusinessTypes: parcel.allowedBusinessTypes
+      },
+      create: {
+        id: parcel.id,
+        cityId: parcel.cityId,
+        countryId: parcel.countryId,
+        name: parcel.name,
+        zoning: parcel.zoning,
+        ownerType: parcel.ownerType,
+        ownerId: parcel.ownerId,
+        status: parcel.status,
+        marketPriceMinor: BigInt(parcel.marketPriceMinor),
+        monthlyRentMinor: BigInt(parcel.monthlyRentMinor),
+        maintenanceMinorPerMonth: BigInt(parcel.maintenanceMinorPerMonth),
+        infrastructureScore: parcel.infrastructureScore,
+        allowedBusinessTypes: parcel.allowedBusinessTypes
+      }
+    });
+  }
+
+  for (const premise of state.premises ?? []) {
+    await prisma.premise?.upsert?.({
+      where: { id: premise.id },
+      update: {
+        landParcelId: premise.landParcelId,
+        cityId: premise.cityId,
+        companyId: premise.companyId,
+        name: premise.name,
+        premiseType: premise.premiseType,
+        acquisitionMode: premise.acquisitionMode,
+        status: premise.status,
+        zoning: premise.zoning,
+        warehouseId: premise.warehouseId,
+        purchasePriceMinor: BigInt(premise.purchasePriceMinor),
+        monthlyRentMinor: BigInt(premise.monthlyRentMinor),
+        maintenanceMinorPerMonth: BigInt(premise.maintenanceMinorPerMonth),
+        acquiredTick: premise.acquiredTick,
+        leaseExpiresTick: premise.leaseExpiresTick
+      },
+      create: {
+        id: premise.id,
+        landParcelId: premise.landParcelId,
+        cityId: premise.cityId,
+        companyId: premise.companyId,
+        name: premise.name,
+        premiseType: premise.premiseType,
+        acquisitionMode: premise.acquisitionMode,
+        status: premise.status,
+        zoning: premise.zoning,
+        warehouseId: premise.warehouseId,
+        purchasePriceMinor: BigInt(premise.purchasePriceMinor),
+        monthlyRentMinor: BigInt(premise.monthlyRentMinor),
+        maintenanceMinorPerMonth: BigInt(premise.maintenanceMinorPerMonth),
+        acquiredTick: premise.acquiredTick,
+        leaseExpiresTick: premise.leaseExpiresTick
       }
     });
   }
@@ -869,6 +947,8 @@ interface NormalizedReadModel {
   readonly companies: readonly Company[];
   readonly bankAccounts: readonly BankAccount[];
   readonly creditScores: readonly CreditScore[];
+  readonly landParcels: readonly LandParcel[];
+  readonly premises: readonly Premise[];
   readonly warehouses: readonly Warehouse[];
   readonly inventoryLots: readonly InventoryLot[];
   readonly productionPlans: readonly ProductionPlan[];
@@ -904,6 +984,8 @@ async function hydrateWorldFromNormalizedReadModel(prisma: PrismaClientLike, sna
       companies: mergeById(snapshotState.companies, normalized.companies),
       bankAccounts: mergeById(snapshotState.bankAccounts, normalized.bankAccounts),
       creditScores: mergeById(snapshotState.creditScores, normalized.creditScores),
+      landParcels: mergeById(snapshotState.landParcels ?? [], normalized.landParcels),
+      premises: mergeById(snapshotState.premises ?? [], normalized.premises),
       warehouses: mergeById(snapshotState.warehouses, normalized.warehouses),
       inventoryLots: mergeById(snapshotState.inventoryLots, normalized.inventoryLots),
       productionPlans: mergeById(snapshotState.productionPlans, normalized.productionPlans),
@@ -931,6 +1013,8 @@ async function collectNormalizedReadModel(prisma: PrismaClientLike): Promise<Nor
   const companies = mapRows(await readRows(prisma.company, "companies", {}), toCompany);
   const bankAccounts = mapRows(await readRows(prisma.bankAccount, "bankAccounts", {}), toBankAccount);
   const creditScores = mapRows(await readRows(prisma.creditScore, "creditScores", {}), toCreditScore);
+  const landParcels = mapRows(await readRows(prisma.landParcel, "landParcels", {}), toLandParcel);
+  const premises = mapRows(await readRows(prisma.premise, "premises", {}), toPremise);
   const warehouses = mapRows(await readRows(prisma.warehouse, "warehouses", {}), toWarehouse);
   const inventoryLots = mapRows(await readRows(prisma.inventoryLot, "inventoryLots", {}), toInventoryLot);
   const productionPlans = mapRows(await readRows(prisma.productionPlan, "productionPlans", {}), toProductionPlan);
@@ -959,6 +1043,8 @@ async function collectNormalizedReadModel(prisma: PrismaClientLike): Promise<Nor
     tupleSource("companies", companies),
     tupleSource("bankAccounts", bankAccounts),
     tupleSource("creditScores", creditScores),
+    tupleSource("landParcels", landParcels),
+    tupleSource("premises", premises),
     tupleSource("warehouses", warehouses),
     tupleSource("inventoryLots", inventoryLots),
     tupleSource("productionPlans", productionPlans),
@@ -998,6 +1084,8 @@ async function collectNormalizedReadModel(prisma: PrismaClientLike): Promise<Nor
     companies,
     bankAccounts,
     creditScores,
+    landParcels,
+    premises,
     warehouses,
     inventoryLots,
     productionPlans,
@@ -1148,6 +1236,44 @@ function toCreditScore(row: Record<string, unknown>): CreditScore {
     score: numberField(row, "score"),
     probabilityOfDefault: numberField(row, "probabilityOfDefault"),
     lastUpdatedTick: numberField(row, "lastUpdatedTick")
+  };
+}
+
+function toLandParcel(row: Record<string, unknown>): LandParcel {
+  return {
+    id: stringField(row, "id"),
+    cityId: stringField(row, "cityId"),
+    countryId: stringField(row, "countryId"),
+    name: stringField(row, "name"),
+    zoning: stringField(row, "zoning") as LandParcel["zoning"],
+    ownerType: stringField(row, "ownerType") as LandParcel["ownerType"],
+    ownerId: stringField(row, "ownerId"),
+    status: stringField(row, "status") as LandParcel["status"],
+    marketPriceMinor: numberField(row, "marketPriceMinor"),
+    monthlyRentMinor: numberField(row, "monthlyRentMinor"),
+    maintenanceMinorPerMonth: numberField(row, "maintenanceMinorPerMonth"),
+    infrastructureScore: numberField(row, "infrastructureScore"),
+    allowedBusinessTypes: stringArray(row, "allowedBusinessTypes")
+  };
+}
+
+function toPremise(row: Record<string, unknown>): Premise {
+  return {
+    id: stringField(row, "id"),
+    landParcelId: stringField(row, "landParcelId"),
+    cityId: stringField(row, "cityId"),
+    companyId: nullableString(row, "companyId"),
+    name: stringField(row, "name"),
+    premiseType: stringField(row, "premiseType") as Premise["premiseType"],
+    acquisitionMode: stringField(row, "acquisitionMode") as Premise["acquisitionMode"],
+    status: stringField(row, "status") as Premise["status"],
+    zoning: stringField(row, "zoning") as Premise["zoning"],
+    warehouseId: nullableString(row, "warehouseId"),
+    purchasePriceMinor: numberField(row, "purchasePriceMinor"),
+    monthlyRentMinor: numberField(row, "monthlyRentMinor"),
+    maintenanceMinorPerMonth: numberField(row, "maintenanceMinorPerMonth"),
+    acquiredTick: nullableNumber(row, "acquiredTick"),
+    leaseExpiresTick: nullableNumber(row, "leaseExpiresTick")
   };
 }
 
@@ -1528,6 +1654,9 @@ function upgradeWorldState(state: WorldState, seed: string): WorldState {
   const explanations = state.explanations ?? [];
   const playerCommands = state.playerCommands ?? [];
   const auditLogs = state.auditLogs ?? [];
+  const seedState = createInitialWorldState(seed);
+  const landParcels = state.landParcels ?? seedState.landParcels;
+  const premises = state.premises ?? seedState.premises;
   const wheat = state.products.find((product) => product.name.toLocaleLowerCase() === "wheat") ?? null;
   const grainfordWarehouse =
     state.warehouses.find(
@@ -1568,6 +1697,8 @@ function upgradeWorldState(state: WorldState, seed: string): WorldState {
     eventImpacts,
     explanations,
     playerCommands,
-    auditLogs
+    auditLogs,
+    landParcels,
+    premises
   };
 }

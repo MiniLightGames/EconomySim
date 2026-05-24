@@ -1,6 +1,6 @@
 # P1-TASK-20260524-0035-land-premise-lease-model
 
-Status: Todo
+Status: Done
 Priority: P1
 Area: Domain / Simulation Core / API / UI
 
@@ -23,3 +23,14 @@ Split the starter premise shortcut into explicit land parcel, premise/building, 
 - Warehouses and production plans reference the premise/building they operate from.
 - Monthly rent/maintenance entries are auditable financial transactions.
 - UI explains why a premise option is available or blocked.
+
+
+## Implementation Notes
+
+- Added domain entities `LandParcel` and `Premise` so `BuyLandCommand` no longer only points at an opaque `lotId`.
+- Preserved `lotId` as a backward-compatible alias for existing UI/API callers and dependent batches.
+- Added `purchase` vs `lease` economics: purchase pays higher upfront price plus maintenance; lease pays first rent plus maintenance and creates monthly rent obligations.
+- Added monthly recurring rent/maintenance processing on the simulation tick schedule.
+- Added zoning validation for the starter food/retail loop: commercial, industrial, and mixed premises are allowed; incompatible zoning is rejected.
+- Extended normalized persistence and Prisma schema with `LandParcel` and `Premise`.
+- UI now lets the player choose an available premise and acquisition mode before creating the operational warehouse/production/retail starter assets.

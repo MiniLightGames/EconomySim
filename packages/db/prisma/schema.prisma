@@ -78,6 +78,55 @@ model City {
   @@index([countryId])
 }
 
+model LandParcel {
+  id                       String   @id
+  cityId                   String
+  countryId                String
+  name                     String
+  zoning                   String
+  ownerType                String
+  ownerId                  String
+  status                   String
+  marketPriceMinor         BigInt   @default(0)
+  monthlyRentMinor         BigInt   @default(0)
+  maintenanceMinorPerMonth BigInt   @default(0)
+  infrastructureScore      Float    @default(0)
+  allowedBusinessTypes     Json
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([cityId])
+  @@index([countryId])
+  @@index([zoning, status])
+  @@index([ownerType, ownerId])
+}
+
+model Premise {
+  id                       String   @id
+  landParcelId             String
+  cityId                   String
+  companyId                String?
+  name                     String
+  premiseType              String
+  acquisitionMode          String
+  status                   String
+  zoning                   String
+  warehouseId              String?
+  purchasePriceMinor       BigInt   @default(0)
+  monthlyRentMinor         BigInt   @default(0)
+  maintenanceMinorPerMonth BigInt   @default(0)
+  acquiredTick             Int?
+  leaseExpiresTick         Int?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([landParcelId])
+  @@index([cityId])
+  @@index([companyId])
+  @@index([zoning, status])
+  @@index([warehouseId])
+}
+
 model Product {
   id                String     @id @default(cuid())
   name              String

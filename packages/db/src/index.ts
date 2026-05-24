@@ -109,6 +109,8 @@ export interface PlayerCommandJournalInput {
 export interface NormalizedWorldReadModel {
   readonly companies: readonly unknown[];
   readonly accounts: readonly unknown[];
+  readonly landParcels: readonly unknown[];
+  readonly premises: readonly unknown[];
   readonly warehouses: readonly unknown[];
   readonly inventoryLots: readonly unknown[];
   readonly productionPlans: readonly unknown[];
@@ -171,9 +173,10 @@ export interface WorldPersistenceContract {
 
 export const PERSISTENCE_CONTRACT_NOTES = [
   "Snapshots remain the rollback safety layer, not the primary read path for the player operations loop.",
-  "Companies, accounts, warehouses, production plans, offers, inventory lots, shipments, resource purchases, command records, audit logs, events, metrics, news, explanations, and financial transactions are durable normalized rows.",
+  "Companies, accounts, land parcels, premises, warehouses, production plans, offers, inventory lots, shipments, resource purchases, command records, audit logs, events, metrics, news, explanations, and financial transactions are durable normalized rows.",
   "Inventory lots persist unit and total cost basis so player-loop margin can be reconstructed from normalized rows.",
   "Manual production runs persist input and output cost allocation so produced inventory has an auditable cost basis.",
+  "Land parcels and premises persist zoning, ownership, acquisition mode, and recurring cost fields separate from warehouses.",
   "Prisma reads hydrate the key player loop from normalized tables and merge it over the latest snapshot fallback.",
   "Consistency status must expose snapshot tick vs normalized latest tick for API health, debugging, and recovery decisions.",
   "Every player command stores idempotency key, lifecycle status, temporary refs when present, and links to resulting events, metrics, and financial transactions.",

@@ -21,6 +21,8 @@ export const landPurchaseBodySchema = z.object({
   companyId: z.string().trim().min(1).max(160),
   cityId: z.string().trim().min(1).max(160),
   lotId: z.string().trim().min(1).max(160).optional(),
+  landParcelId: z.string().trim().min(1).max(160).optional(),
+  premiseId: z.string().trim().min(1).max(160).optional(),
   mode: z.enum(["purchase", "lease"]).default("purchase")
 });
 
@@ -39,6 +41,8 @@ export const buyLandCommandSchema = z.object({
   companyId: z.string().trim().min(1).max(160),
   cityId: z.string().trim().min(1).max(160),
   lotId: z.string().trim().min(1).max(160),
+  landParcelId: z.string().trim().min(1).max(160).optional(),
+  premiseId: z.string().trim().min(1).max(160).optional(),
   mode: z.enum(["purchase", "lease"]).optional()
 });
 

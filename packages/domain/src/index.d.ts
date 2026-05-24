@@ -154,6 +154,44 @@ export interface Warehouse {
     readonly capacity: number;
     readonly handlingCostMinorPerUnit: number;
 }
+export type LandZoning = "commercial" | "industrial" | "agricultural" | "residential" | "mixed";
+export type LandOwnerType = "state" | "city" | "company" | "npc";
+export type LandParcelStatus = "available" | "owned" | "leased" | "reserved";
+export type PremiseType = "storefront" | "workshop" | "warehouse" | "farm" | "factory";
+export type PremiseStatus = "available" | "active" | "under_construction" | "archived";
+export type PremiseAcquisitionMode = "purchase" | "lease" | "state_owned";
+export interface LandParcel {
+    readonly id: EntityId;
+    readonly cityId: EntityId;
+    readonly countryId: EntityId;
+    readonly name: string;
+    readonly zoning: LandZoning;
+    readonly ownerType: LandOwnerType;
+    readonly ownerId: EntityId;
+    readonly status: LandParcelStatus;
+    readonly marketPriceMinor: number;
+    readonly monthlyRentMinor: number;
+    readonly maintenanceMinorPerMonth: number;
+    readonly infrastructureScore: number;
+    readonly allowedBusinessTypes: readonly string[];
+}
+export interface Premise {
+    readonly id: EntityId;
+    readonly landParcelId: EntityId;
+    readonly cityId: EntityId;
+    readonly companyId: EntityId | null;
+    readonly name: string;
+    readonly premiseType: PremiseType;
+    readonly acquisitionMode: PremiseAcquisitionMode;
+    readonly status: PremiseStatus;
+    readonly zoning: LandZoning;
+    readonly warehouseId: EntityId | null;
+    readonly purchasePriceMinor: number;
+    readonly monthlyRentMinor: number;
+    readonly maintenanceMinorPerMonth: number;
+    readonly acquiredTick: number | null;
+    readonly leaseExpiresTick: number | null;
+}
 export interface InventoryLot {
     readonly id: EntityId;
     readonly warehouseId: EntityId;
@@ -1330,6 +1368,8 @@ export interface WorldState {
     readonly illegalContracts: readonly IllegalContract[];
     readonly populationCohorts: readonly PopulationCohort[];
     readonly contracts: readonly Contract[];
+    readonly landParcels: readonly LandParcel[];
+    readonly premises: readonly Premise[];
     readonly warehouses: readonly Warehouse[];
     readonly inventoryLots: readonly InventoryLot[];
     readonly shipments: readonly Shipment[];
@@ -1379,6 +1419,8 @@ export interface BuyLandCommand extends PlayerCommandBatchDependencyHints {
     readonly companyId: EntityId;
     readonly cityId: EntityId;
     readonly lotId: EntityId;
+    readonly landParcelId?: EntityId;
+    readonly premiseId?: EntityId;
     readonly mode?: "purchase" | "lease";
 }
 export interface BuyResourceCommand extends PlayerCommandBatchDependencyHints {
@@ -1412,7 +1454,7 @@ export interface SetRetailPriceCommand extends PlayerCommandBatchDependencyHints
     readonly currencyCode: CurrencyCode;
 }
 export type PlayerCommand = CreateCompanyCommand | BuyLandCommand | BuyResourceCommand | RunManualProductionCommand | SetRetailPriceCommand;
-export declare const ECONOMY_INVARIANTS: readonly ["Money changes only through balanced ledger transactions.", "Player intent enters the world as backend-validated commands applied on simulation ticks.", "Inventory moves only by warehouse to cargo batch to warehouse.", "Loans and market orders are validated by simulation-core before balances change.", "Ordinary retail goods clear through retail markets, not exchange order books.", "Players influence governments through votes, funding, lobbying, and media rather than becoming politicians.", "Wars are automated state conflicts; players participate through economic supply, finance, and logistics only.", "Strategic cells keep factual and legal territorial control separate.", "R&D changes technology levels through validated research projects, patents, or license agreements.", "Resource deposits, pollution, and environmental health are tick-updated simulation state.", "Taxes, subsidies, nationalization, and bailouts must be represented as auditable financial transactions.", "Black market trades are backend-validated risky commands, never direct player balance or inventory edits.", "B2B resource purchases move inventory through warehouse records and settle money through balanced ledger transactions on tick commands.", "Player land, resource, production, and retail operations change state only through backend-bound tick commands.", "Fines, confiscations, bribes, and illegal proceeds are auditable financial transactions and enforcement events.", "Important world changes must produce explainable causes, impacts, metrics, and news.", "Private company finances stay hidden unless the company is publicly listed.", "Public statistics carry reliability and manipulation-risk metadata.", "Important actions create audit log records, events, and metrics.", "Player command records link idempotency keys to resulting events, metrics, and financial transactions.", "Dependent command batches resolve temporary references through deterministic command results before a tick mutates world state."];
+export declare const ECONOMY_INVARIANTS: readonly ["Money changes only through balanced ledger transactions.", "Player intent enters the world as backend-validated commands applied on simulation ticks.", "Inventory moves only by warehouse to cargo batch to warehouse.", "Loans and market orders are validated by simulation-core before balances change.", "Ordinary retail goods clear through retail markets, not exchange order books.", "Players influence governments through votes, funding, lobbying, and media rather than becoming politicians.", "Wars are automated state conflicts; players participate through economic supply, finance, and logistics only.", "Strategic cells keep factual and legal territorial control separate.", "R&D changes technology levels through validated research projects, patents, or license agreements.", "Resource deposits, pollution, and environmental health are tick-updated simulation state.", "Taxes, subsidies, nationalization, and bailouts must be represented as auditable financial transactions.", "Black market trades are backend-validated risky commands, never direct player balance or inventory edits.", "B2B resource purchases move inventory through warehouse records and settle money through balanced ledger transactions on tick commands.", "Player land, resource, production, and retail operations change state only through backend-bound tick commands.", "Fines, confiscations, bribes, and illegal proceeds are auditable financial transactions and enforcement events.", "Important world changes must produce explainable causes, impacts, metrics, and news.", "Private company finances stay hidden unless the company is publicly listed.", "Public statistics carry reliability and manipulation-risk metadata.", "Important actions create audit log records, events, and metrics.", "Player command records link idempotency keys to resulting events, metrics, and financial transactions.", "Dependent command batches resolve temporary references through deterministic command results before a tick mutates world state.", "Land, premises, leases, and warehouses are distinct state entities; zoning and recurring costs gate business operations."];
 export declare function createInitialWorldState(seed?: string): WorldState;
 export declare function summarizeWorld(state: WorldState): {
     currentTick: number;

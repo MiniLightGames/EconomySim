@@ -24,6 +24,7 @@ import type {
   Loan,
   LobbyingAction,
   LogisticsRoute,
+  LandParcel,
   MediaInfluence,
   Metric,
   MilitaryOrder,
@@ -61,6 +62,7 @@ import type {
   Warehouse,
   ManualProductionRun,
   PlayerCommandRecord,
+  Premise,
   WorldState
 } from "@economysim/domain";
 
@@ -304,10 +306,14 @@ export interface LandPurchaseInput {
   readonly companyId: string;
   readonly cityId: string;
   readonly lotId?: string;
+  readonly landParcelId?: string;
+  readonly premiseId?: string;
   readonly mode?: "purchase" | "lease";
 }
 
 export interface LandPurchaseResponse {
+  readonly landParcel: LandParcel | null;
+  readonly premise: Premise | null;
   readonly warehouse: Warehouse | null;
   readonly productionPlan: WorldState["productionPlans"][number] | null;
   readonly retailOffer: RetailOffer | null;

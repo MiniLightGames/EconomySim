@@ -236,7 +236,9 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
         commandId: makeCommandId(seed, state.currentTick, "buy-land", idempotencyKey),
         companyId: body.companyId,
         cityId: body.cityId,
-        lotId: body.lotId ?? `${body.cityId}-starter-premise`,
+        lotId: body.lotId ?? body.premiseId ?? body.landParcelId ?? `${body.cityId}-starter-premise`,
+        landParcelId: body.landParcelId,
+        premiseId: body.premiseId,
         mode: body.mode
       },
       session
@@ -251,10 +253,14 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
       actionType: "BuyLandCommand"
     });
     const warehouseId = getEventMetadataString(execution.events, "LandPremiseAcquiredEvent", "warehouseId");
+    const landParcelId = getEventMetadataString(execution.events, "LandPremiseAcquiredEvent", "landParcelId");
+    const premiseId = getEventMetadataString(execution.events, "LandPremiseAcquiredEvent", "premiseId");
     const productionPlanId = getEventMetadataString(execution.events, "LandPremiseAcquiredEvent", "productionPlanId");
     const retailOfferId = getEventMetadataString(execution.events, "LandPremiseAcquiredEvent", "retailOfferId");
 
     return reply.status(execution.duplicate ? 200 : 201).send({
+      landParcel: execution.state.landParcels.find((candidate) => candidate.id === landParcelId) ?? null,
+      premise: execution.state.premises.find((candidate) => candidate.id === premiseId) ?? null,
       warehouse: execution.state.warehouses.find((candidate) => candidate.id === warehouseId) ?? null,
       productionPlan: execution.state.productionPlans.find((candidate) => candidate.id === productionPlanId) ?? null,
       retailOffer: execution.state.retailOffers.find((candidate) => candidate.id === retailOfferId) ?? null,

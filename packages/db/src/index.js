@@ -1,0 +1,50 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.PERSISTENCE_CONTRACT_NOTES = exports.DB_INVARIANTS = void 0;
+exports.validateLedgerTransaction = validateLedgerTransaction;
+exports.assertLedgerTransactionBalanced = assertLedgerTransactionBalanced;
+exports.DB_INVARIANTS = [
+    "Ledger entries must balance to zero per currency.",
+    "Every command that changes durable state must be auditable.",
+    "World events, metrics, and snapshots are append-only operational records."
+];
+function validateLedgerTransaction(transaction) {
+    const errors = [];
+    if (transaction.entries.length < 2) {
+        errors.push("Ledger transactions require at least two entries.");
+    }
+    const totalsByCurrency = new Map();
+    for (const entry of transaction.entries) {
+        totalsByCurrency.set(entry.currencyCode, (totalsByCurrency.get(entry.currencyCode) ?? 0n) + entry.amountMinor);
+    }
+    for (const [currencyCode, total] of totalsByCurrency) {
+        if (total !== 0n) {
+            errors.push(`Ledger entries for ${currencyCode} do not balance to zero.`);
+        }
+    }
+    return {
+        ok: errors.length === 0,
+        errors
+    };
+}
+function assertLedgerTransactionBalanced(transaction) {
+    const result = validateLedgerTransaction(transaction);
+    if (!result.ok) {
+        throw new Error(result.errors.join(" "));
+    }
+}
+exports.PERSISTENCE_CONTRACT_NOTES = [
+    "Snapshots remain the rollback safety layer, not the primary read path for the player operations loop.",
+    "Companies, accounts, land parcels, premises, warehouses, production plans, offers, inventory lots, shipments, resource purchases, command records, audit logs, events, metrics, news, explanations, and financial transactions are durable normalized rows.",
+    "Inventory lots persist unit and total cost basis so player-loop margin can be reconstructed from normalized rows.",
+    "Manual production runs persist input and output cost allocation so produced inventory has an auditable cost basis.",
+    "Land parcels and premises persist zoning, ownership, acquisition mode, and recurring cost fields separate from warehouses.",
+    "Prisma reads hydrate the key player loop from normalized tables and merge it over the latest snapshot fallback.",
+    "Consistency status must expose snapshot tick vs normalized latest tick for API health, debugging, and recovery decisions.",
+    "Every player command stores idempotency key, lifecycle status, temporary refs when present, and links to resulting events, metrics, and financial transactions.",
+    "All command writes must be executed inside a Prisma transaction boundary before the snapshot is appended.",
+    "Dependent command batches must persist resolved command records and command result links so snapshots remain replayable.",
+    "Auth binds user -> session -> player on the backend; request bodies and identity headers are not trusted for playerId.",
+    "RBAC starts with player, developer, and admin roles; developer/admin gates protect debug, rollback, snapshot, and constructor-publish operations."
+];
+//# sourceMappingURL=index.js.map

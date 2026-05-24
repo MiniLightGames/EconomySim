@@ -7,9 +7,11 @@ import type {
   Front,
   InfrastructureLink,
   LogisticsRoute,
+  LandParcel,
   NewsItem,
   ResourceDeposit,
   RouteNode,
+  Premise,
   Shipment,
   StrategicCell,
   WarDamage,
@@ -152,6 +154,8 @@ export function GameClient() {
   const [selectedTechnologyId, setSelectedTechnologyId] = useState<string | null>(null);
   const [selectedBlackMarketId, setSelectedBlackMarketId] = useState<string | null>(null);
   const [selectedOperationsCompanyId, setSelectedOperationsCompanyId] = useState<string | null>(null);
+  const [selectedPremiseId, setSelectedPremiseId] = useState<string | null>(null);
+  const [premiseAcquisitionMode, setPremiseAcquisitionMode] = useState<"purchase" | "lease">("lease");
   const [selectedResourceOfferId, setSelectedResourceOfferId] = useState<string | null>(null);
   const [mapLayers, setMapLayers] = useState<MapLayerState>(() => createDefaultMapLayers());
   const [companyName, setCompanyName] = useState("");
@@ -304,6 +308,15 @@ export function GameClient() {
         return firstOffer?.id ?? null;
       });
 
+      setSelectedPremiseId((current) => {
+        const available = getAvailablePremises(nextData.world, selectedCountryId, selectedCityId);
+        if (current && available.some((premise) => premise.id === current)) {
+          return current;
+        }
+
+        return available[0]?.id ?? null;
+      });
+
       return nextData;
     } catch (refreshError) {
       setError(formatApiError(refreshError));
@@ -410,7 +423,9 @@ export function GameClient() {
       const result = await purchaseLand({
         companyId,
         cityId,
-        mode: "purchase"
+        lotId: selectedPremiseId ?? undefined,
+        premiseId: selectedPremiseId ?? undefined,
+        mode: premiseAcquisitionMode
       });
       setNotice(`Помещение готово: ${result.warehouse?.name ?? "warehouse"}. Можно покупать wheat и производить bread.`);
       const refreshed = await refreshWorld(false);
@@ -418,12 +433,14 @@ export function GameClient() {
         buildActionResultSummary({
           before,
           createdEntities: [
+            result.landParcel ? `Land: ${result.landParcel.name}` : "Land parcel: allocated",
+            result.premise ? `Premise: ${result.premise.name}` : "Premise: acquired",
             result.warehouse ? `Warehouse: ${result.warehouse.name}` : "Warehouse: created",
             result.productionPlan ? `Production plan: ${result.productionPlan.id}` : "Production plan: starter",
             result.retailOffer ? `Retail offer: ${result.retailOffer.id}` : "Retail offer: starter"
           ],
           data: refreshed,
-          description: "Premise command created the operational warehouse, starter recipe, retail offer and license.",
+          description: `${premiseAcquisitionMode === "lease" ? "Lease" : "Purchase"} command separated land, premise, warehouse, starter recipe, retail offer and license.`,
           selectedCompanyId: companyId,
           title: "Buy / lease premise"
         })
@@ -952,16 +969,20 @@ export function GameClient() {
             lastActionResult={lastActionResult}
             isUpdatingRetailPrice={isUpdatingRetailPrice}
             maxUnitPriceMinor={resourceMaxPriceMinor}
+            premiseAcquisitionMode={premiseAcquisitionMode}
             productionQuantity={productionQuantity}
             retailPriceMinor={retailPriceMinor}
             resourceDeliveryMode={resourceDeliveryMode}
             resourceQuantity={resourcePurchaseQuantity}
             selectedCompanyId={selectedOperationsCompanyId}
             selectedCountryId={selectedCountry?.id ?? null}
+            selectedPremiseId={selectedPremiseId}
             selectedResourceOfferId={selectedResourceOfferId}
             onCompanyChange={handleOperationsCompanyChange}
             onMaxUnitPriceChange={setResourceMaxPriceMinor}
             onProductionQuantityChange={setProductionQuantity}
+            onPremiseAcquisitionModeChange={setPremiseAcquisitionMode}
+            onPremiseChange={setSelectedPremiseId}
             onRetailPriceChange={setRetailPriceMinor}
             onResourceDeliveryModeChange={setResourceDeliveryMode}
             onResourceQuantityChange={setResourcePurchaseQuantity}
@@ -1362,6 +1383,7 @@ function FeedbackTile({
   value
 }: {
   readonly icon: ReactNode;
+  readonly key?: string;
   readonly label: string;
   readonly tone: "danger" | "neutral" | "success" | "warning";
   readonly value: string;
@@ -3055,6 +3077,24 @@ function DisabledReason({ text }: { readonly text: string }) {
   );
 }
 
+function isStarterPremiseZoningAllowed(zoning: LandParcel["zoning"] | Premise["zoning"]): boolean {
+  return zoning === "commercial" || zoning === "industrial" || zoning === "mixed";
+}
+
+function getAvailablePremises(world: GameData["world"], countryId: string | null, cityId?: string | null): readonly Premise[] {
+  return world.premises
+    .filter((premise) => premise.status === "available")
+    .filter((premise) => !cityId || premise.cityId === cityId)
+    .filter((premise) => {
+      const parcel = world.landParcels.find((candidate) => candidate.id === premise.landParcelId) ?? null;
+      return (!countryId || parcel?.countryId === countryId) && isStarterPremiseZoningAllowed(premise.zoning);
+    });
+}
+
+function getLandParcelForPremise(world: GameData["world"], premise: Premise | null): LandParcel | null {
+  return premise ? world.landParcels.find((parcel) => parcel.id === premise.landParcelId) ?? null : null;
+}
+
 function OperationsPanel({
   data,
   isPurchasingLand,
@@ -3066,6 +3106,8 @@ function OperationsPanel({
   onCompanyChange,
   onMaxUnitPriceChange,
   onProductionQuantityChange,
+  onPremiseAcquisitionModeChange,
+  onPremiseChange,
   onPurchaseLand,
   onRetailPriceChange,
   onResourceOfferChange,
@@ -3074,12 +3116,14 @@ function OperationsPanel({
   onRunProduction,
   onSetRetailPrice,
   onSubmitPurchase,
+  premiseAcquisitionMode,
   productionQuantity,
   retailPriceMinor,
   resourceDeliveryMode,
   resourceQuantity,
   selectedCompanyId,
   selectedCountryId,
+  selectedPremiseId,
   selectedResourceOfferId
 }: {
   readonly data: GameData | null;
@@ -3092,6 +3136,8 @@ function OperationsPanel({
   readonly onCompanyChange: (companyId: string) => void;
   readonly onMaxUnitPriceChange: (value: string) => void;
   readonly onProductionQuantityChange: (value: string) => void;
+  readonly onPremiseAcquisitionModeChange: (value: "purchase" | "lease") => void;
+  readonly onPremiseChange: (premiseId: string) => void;
   readonly onPurchaseLand: (event: FormEvent<HTMLFormElement>) => void;
   readonly onRetailPriceChange: (value: string) => void;
   readonly onResourceOfferChange: (offerId: string) => void;
@@ -3100,18 +3146,24 @@ function OperationsPanel({
   readonly onRunProduction: (event: FormEvent<HTMLFormElement>) => void;
   readonly onSetRetailPrice: (event: FormEvent<HTMLFormElement>) => void;
   readonly onSubmitPurchase: (event: FormEvent<HTMLFormElement>) => void;
+  readonly premiseAcquisitionMode: "purchase" | "lease";
   readonly productionQuantity: string;
   readonly retailPriceMinor: string;
   readonly resourceDeliveryMode: "pickup" | "delivery";
   readonly resourceQuantity: string;
   readonly selectedCompanyId: string | null;
   readonly selectedCountryId: string | null;
+  readonly selectedPremiseId: string | null;
   readonly selectedResourceOfferId: string | null;
 }) {
   const companies = data ? getPlayerCompanies(data.world.companies) : [];
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? companies[0] ?? null;
+  const availablePremises = data ? getAvailablePremises(data.world, selectedCompany?.countryId ?? selectedCountryId) : [];
+  const selectedPremise = availablePremises.find((premise) => premise.id === selectedPremiseId) ?? availablePremises[0] ?? null;
+  const selectedLandParcel = data ? getLandParcelForPremise(data.world, selectedPremise) : null;
+  const companyPremises = data?.world.premises.filter((premise) => premise.companyId === selectedCompany?.id && premise.status === "active") ?? [];
   const companyWarehouses = data?.warehouses.filter((warehouse) => warehouse.companyId === selectedCompany?.id) ?? [];
-  const companyHasPremise = companyWarehouses.length > 0;
+  const companyHasPremise = companyWarehouses.length > 0 || companyPremises.length > 0;
   const companyInventory =
     data?.world.inventoryLots
       .filter((lot) => companyWarehouses.some((warehouse) => warehouse.id === lot.warehouseId) && lot.quantity > 0)
@@ -3188,6 +3240,13 @@ function OperationsPanel({
   const hasResourceOrder = companyResourcePurchases.length > 0;
   const hasProductionOutput = companyProductionRuns.length > 0 || outputInventoryQuantity > 0;
   const hasReviewedResults = retailRevenueMinor > 0 || retailSales.length > 0 || Boolean(getLatestProfitabilityExplanation(data, selectedCompany?.id ?? null));
+  const premiseDisabledReason = !selectedCompany
+    ? "нет компании"
+    : availablePremises.length === 0
+      ? "нет доступного помещения нужного zoning"
+      : !selectedPremise
+        ? "выберите помещение"
+        : null;
   const resourceDisabledReason = !selectedCompany
     ? "нет компании"
     : !companyHasPremise
@@ -3233,11 +3292,11 @@ function OperationsPanel({
     {
       active: companies.length > 0 && !companyHasPremise,
       complete: companyHasPremise,
-      description: "Помещение создаёт склад, starter recipe, retail offer и лицензию.",
-      disabledReason: companies.length > 0 ? null : "нет компании",
+      description: "Выберите доступный premise: zoning, purchase/lease и recurring costs влияют на экономику.",
+      disabledReason: premiseDisabledReason,
       id: "buy-premise",
       label: "Buy/lease premise",
-      statusText: companyHasPremise ? `${companyWarehouses.length} warehouse(s)` : "нет склада"
+      statusText: companyHasPremise ? `${companyWarehouses.length} warehouse(s)` : selectedPremise ? selectedPremise.name : "нет склада"
     },
     {
       active: companyHasPremise && !hasResourceOrder,
@@ -3312,14 +3371,64 @@ function OperationsPanel({
             {!companyHasPremise ? (
               <form className="grid gap-3 rounded-md border border-economy-gold/50 bg-economy-gold/10 p-3" onSubmit={onPurchaseLand}>
                 <SubPanelTitle icon={<WarehouseIcon className="h-4 w-4" aria-hidden="true" />} title="Buy / Lease Premise" />
-                <p className="text-sm text-stone-300">Компания зарегистрирована. Следующий command/tick шаг создаст склад, bread production plan, retail offer и базовую лицензию.</p>
+                <p className="text-sm text-stone-300">Выберите реальное помещение: land parcel, zoning, purchase/lease и recurring costs теперь отдельные сущности.</p>
+                {availablePremises.length > 0 ? (
+                  <>
+                    <label className="grid gap-1 text-sm text-stone-300">
+                      Available premise
+                      <select
+                        aria-label="Select available premise"
+                        className="min-h-10 rounded-md border border-[#344239] bg-[#0d130f] px-3 text-stone-50 outline-none transition focus:border-economy-gold"
+                        onChange={(event) => onPremiseChange(event.target.value)}
+                        value={selectedPremise?.id ?? ""}
+                      >
+                        {availablePremises.map((premise) => {
+                          const parcel = data ? getLandParcelForPremise(data.world, premise) : null;
+
+                          return (
+                            <option key={premise.id} value={premise.id}>
+                              {premise.name} / {premise.zoning} / rent {formatMoneyMinor(premise.monthlyRentMinor)} / buy {formatMoneyMinor(premise.purchasePriceMinor)}
+                              {parcel ? ` / ${parcel.name}` : ""}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-sm text-stone-300">
+                      Acquisition
+                      <select
+                        aria-label="Premise acquisition mode"
+                        className="min-h-10 rounded-md border border-[#344239] bg-[#0d130f] px-3 text-stone-50 outline-none transition focus:border-economy-gold"
+                        onChange={(event) => onPremiseAcquisitionModeChange(event.target.value as "purchase" | "lease")}
+                        value={premiseAcquisitionMode}
+                      >
+                        <option value="lease">lease — lower upfront cost + monthly rent</option>
+                        <option value="purchase">purchase — higher upfront cost + maintenance only</option>
+                      </select>
+                    </label>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <MiniStat label="Zoning" value={selectedPremise?.zoning ?? "n/a"} />
+                      <MiniStat label="Upfront" value={formatMoneyMinor(premiseAcquisitionMode === "lease" ? (selectedPremise?.monthlyRentMinor ?? 0) + (selectedPremise?.maintenanceMinorPerMonth ?? 0) : selectedPremise?.purchasePriceMinor ?? 0)} />
+                      <MiniStat label="Monthly" value={formatMoneyMinor((premiseAcquisitionMode === "lease" ? selectedPremise?.monthlyRentMinor ?? 0 : 0) + (selectedPremise?.maintenanceMinorPerMonth ?? 0))} />
+                    </div>
+                    {selectedLandParcel ? (
+                      <p className="rounded-md border border-[#344239] bg-black/25 p-2 text-xs text-stone-300">
+                        Land parcel: {selectedLandParcel.name}. Owner: {selectedLandParcel.ownerType}. Infrastructure: {formatPercent(selectedLandParcel.infrastructureScore)}. Allowed: {selectedLandParcel.allowedBusinessTypes.join(", ")}.
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <EmptyState>No available commercial/industrial/mixed premises in this company country.</EmptyState>
+                )}
+                {premiseDisabledReason ? <DisabledReason text={premiseDisabledReason} /> : null}
                 <button
                   className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-economy-gold/70 bg-economy-gold px-3 text-sm font-bold text-[#17110a] transition hover:bg-[#efc46c] disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={isPurchasingLand}
+                  disabled={isPurchasingLand || Boolean(premiseDisabledReason)}
+                  title={premiseDisabledReason ?? undefined}
                   type="submit"
                 >
                   {isPurchasingLand ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <WarehouseIcon className="h-4 w-4" aria-hidden="true" />}
-                  Купить помещение
+                  {premiseAcquisitionMode === "lease" ? "Арендовать помещение" : "Купить помещение"}
                 </button>
               </form>
             ) : null}

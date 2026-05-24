@@ -59,4 +59,5 @@ ADR-XXXX-short-name.md
 
 ## Recent stage completions
 
+- `P1-TASK-20260524-0035-land-premise-lease-model.md` - Done: separate land parcel/premise state, zoning, purchase vs lease economics, recurring costs, persistence, and UI premise selector.
 - `P1-TASK-20260524-0034-first-business-onboarding-ui.md` - Done: guided first-business UI, action summaries, disabled reasons, and map highlights.

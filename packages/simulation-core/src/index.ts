@@ -43,6 +43,7 @@ import type {
   License,
   Loan,
   LogisticsRoute,
+  LandParcel,
   LobbyingAction,
   MediaInfluence,
   Metric,
@@ -67,6 +68,7 @@ import type {
   ProductionPlan,
   ProductionRunInputConsumption,
   Protest,
+  Premise,
   PublicDebt,
   RefugeeFlow,
   ResearchProject,
@@ -126,6 +128,8 @@ type Mutable<T> = {
 type MutableCity = Mutable<City>;
 type MutableCountry = Mutable<Country>;
 type MutableCompany = Mutable<Company>;
+type MutableLandParcel = Omit<Mutable<LandParcel>, "allowedBusinessTypes"> & { allowedBusinessTypes: string[] };
+type MutablePremise = Mutable<Premise>;
 type MutableWarehouse = Mutable<Warehouse>;
 type MutableProductionPlan = Omit<Mutable<ProductionPlan>, "inputs"> & { inputs: Array<Mutable<ProductionPlan["inputs"][number]>> };
 type MutableInventoryLot = Mutable<InventoryLot>;
@@ -404,6 +408,8 @@ const NEED_PROFILE: Record<NeedCategory, { readonly unitsPerPersonPerTick: numbe
   entertainment: { unitsPerPersonPerTick: 0.004, budgetShare: 0.1 }
 };
 
+const MONTHLY_TICK_INTERVAL = 24 * 30;
+
 const INCOME_NEED_MULTIPLIER: Record<PopulationCohort["incomeLevel"], Record<NeedCategory, number>> = {
   low: {
     food: 1,
@@ -439,6 +445,11 @@ export function runTick(input: TickInput): TickResult {
   const countries: MutableCountry[] = loadedState.countries.map((country) => ({ ...country }));
   const cities: MutableCity[] = loadedState.cities.map((city) => ({ ...city }));
   const companies: MutableCompany[] = loadedState.companies.map((company) => ({ ...company }));
+  const landParcels: MutableLandParcel[] = (loadedState.landParcels ?? []).map((parcel) => ({
+    ...parcel,
+    allowedBusinessTypes: [...parcel.allowedBusinessTypes]
+  }));
+  const premises: MutablePremise[] = (loadedState.premises ?? []).map((premise) => ({ ...premise }));
   const populationCohorts: MutablePopulationCohort[] = loadedState.populationCohorts.map((cohort) => ({ ...cohort }));
   const warehouses: MutableWarehouse[] = loadedState.warehouses.map((warehouse) => ({ ...warehouse }));
   const productionPlans: MutableProductionPlan[] = loadedState.productionPlans.map((plan) => ({
@@ -558,6 +569,8 @@ export function runTick(input: TickInput): TickResult {
   const commandAdjustedState: WorldState = {
     ...loadedState,
     companies,
+    landParcels,
+    premises,
     bankAccounts,
     creditScores,
     warehouses,
@@ -599,6 +612,8 @@ export function runTick(input: TickInput): TickResult {
       state: commandAdjustedState,
       command,
       companies,
+      landParcels,
+      premises,
       bankAccounts,
       creditScores,
       warehouses,
@@ -620,6 +635,18 @@ export function runTick(input: TickInput): TickResult {
       seed: input.seed
     });
   }
+
+  processRecurringPremiseCosts({
+    tick: nextTick,
+    seed: input.seed,
+    companies,
+    premises,
+    bankAccounts,
+    financialTransactions,
+    events: economyEvents,
+    metrics: economyMetrics,
+    news: commandNews
+  });
 
 
   processProduction({
@@ -956,6 +983,8 @@ export function runTick(input: TickInput): TickResult {
     countries,
     cities,
     companies,
+    landParcels,
+    premises,
     populationCohorts,
     warehouses,
     inventoryLots,
@@ -3082,6 +3111,8 @@ interface ApplyAcceptedPlayerCommandInput {
   readonly state: WorldState;
   readonly command: PlayerCommand;
   readonly companies: MutableCompany[];
+  readonly landParcels: MutableLandParcel[];
+  readonly premises: MutablePremise[];
   readonly bankAccounts: MutableBankAccount[];
   readonly creditScores: MutableCreditScore[];
   readonly warehouses: MutableWarehouse[];
@@ -3243,6 +3274,108 @@ function applyCreateCompanyCommand(input: ApplyAcceptedPlayerCommandInput, comma
   });
 }
 
+function processRecurringPremiseCosts(input: {
+  readonly tick: number;
+  readonly seed: string;
+  readonly companies: readonly MutableCompany[];
+  readonly premises: readonly MutablePremise[];
+  readonly bankAccounts: readonly MutableBankAccount[];
+  readonly financialTransactions: FinancialTransaction[];
+  readonly events: DomainEvent[];
+  readonly metrics: Metric[];
+  readonly news: NewsItem[];
+}): void {
+  if (input.tick <= 0 || input.tick % MONTHLY_TICK_INTERVAL !== 0) {
+    return;
+  }
+
+  for (const premise of input.premises) {
+    if (premise.status !== "active" || !premise.companyId) {
+      continue;
+    }
+
+    const company = input.companies.find((candidate) => candidate.id === premise.companyId) ?? null;
+    if (!company) {
+      continue;
+    }
+
+    const rentMinor = premise.acquisitionMode === "lease" ? premise.monthlyRentMinor : 0;
+    const maintenanceMinor = premise.maintenanceMinorPerMonth;
+    const totalMinor = sanitizeMoney(rentMinor + maintenanceMinor);
+    if (totalMinor <= 0) {
+      continue;
+    }
+
+    const account = getSettlementAccount(input.bankAccounts, "player", company.ownerId, company.currencyCode);
+    if (!account) {
+      continue;
+    }
+
+    const paidMinor = Math.min(getAvailableCashMinor(account), totalMinor);
+    account.balanceMinor = sanitizeMoney(account.balanceMinor - paidMinor);
+
+    input.financialTransactions.push({
+      id: `${input.seed}-tx-${input.tick}-${premise.id}-recurring-premise-cost`,
+      tick: input.tick,
+      type: "LandPremiseTransaction",
+      entries: [
+        {
+          ownerType: "bank_account",
+          ownerId: account.id,
+          amountMinor: -paidMinor,
+          currencyCode: company.currencyCode
+        },
+        {
+          ownerType: "state",
+          ownerId: premise.cityId,
+          amountMinor: paidMinor,
+          currencyCode: company.currencyCode
+        }
+      ]
+    });
+    input.events.push({
+      id: `${input.seed}-event-${input.tick}-${premise.id}-recurring-premise-cost`,
+      tick: input.tick,
+      type: "LandPremiseRecurringCostEvent",
+      message: `${company.name} paid recurring premise ${premise.acquisitionMode === "lease" ? "rent and " : ""}maintenance for ${premise.name}.`,
+      entityIds: [company.id, premise.id, account.id],
+      metadata: {
+        companyId: company.id,
+        premiseId: premise.id,
+        rentMinor,
+        maintenanceMinor,
+        paidMinor,
+        unpaidMinor: sanitizeMoney(totalMinor - paidMinor)
+      }
+    });
+    input.metrics.push({
+      id: `${input.seed}-metric-${input.tick}-${premise.id}-recurring-premise-cost`,
+      tick: input.tick,
+      name: "land.premise.recurring_cost_minor",
+      value: paidMinor,
+      tags: {
+        companyId: company.id,
+        premiseId: premise.id,
+        mode: premise.acquisitionMode
+      }
+    });
+
+    if (paidMinor < totalMinor) {
+      input.news.push({
+        id: `${input.seed}-news-${input.tick}-${premise.id}-premise-cost-shortfall`,
+        tick: input.tick,
+        category: "corporate",
+        templateId: null,
+        headline: `${company.name} misses part of premise costs`,
+        body: `The company paid ${paidMinor} of ${totalMinor} due for rent/maintenance. This is a business-risk signal for future credit and license checks.`,
+        severity: "warning",
+        relatedEntityIds: [company.id, premise.id],
+        reliabilityId: null
+      });
+    }
+  }
+}
+
 function applyBuyLandCommand(input: ApplyAcceptedPlayerCommandInput, command: Extract<PlayerCommand, { type: "BuyLandCommand" }>): void {
   const company = input.companies.find((candidate) => candidate.id === command.companyId);
   const city = input.state.cities.find((candidate) => candidate.id === command.cityId);
@@ -3259,28 +3392,96 @@ function applyBuyLandCommand(input: ApplyAcceptedPlayerCommandInput, command: Ex
     throw new Error("COMPANY_PREMISE_ALREADY_EXISTS");
   }
 
-  const landCostMinor = command.mode === "lease" ? 150_000 : 750_000;
+  const requestedPremiseId = command.premiseId ?? command.lotId;
+  const requestedPremise = input.premises.find((premise) => premise.id === requestedPremiseId) ?? null;
+  const requestedLandParcelId = command.landParcelId ?? requestedPremise?.landParcelId ?? command.lotId;
+  const explicitLandParcel = input.landParcels.find((parcel) => parcel.id === requestedLandParcelId) ?? null;
+  const availablePremise =
+    requestedPremise ??
+    input.premises.find(
+      (premise) => premise.cityId === city.id && premise.status === "available" && isStarterBusinessZoningAllowed(premise.zoning)
+    ) ??
+    null;
+  const landParcel =
+    explicitLandParcel ??
+    (availablePremise ? input.landParcels.find((parcel) => parcel.id === availablePremise.landParcelId) ?? null : null) ??
+    input.landParcels.find(
+      (parcel) => parcel.cityId === city.id && parcel.status === "available" && isStarterBusinessZoningAllowed(parcel.zoning)
+    ) ??
+    null;
+
+  if (!landParcel) {
+    throw new Error("LAND_PARCEL_NOT_AVAILABLE");
+  }
+
+  if (landParcel.cityId !== city.id || landParcel.countryId !== company.countryId) {
+    throw new Error("LAND_CITY_COUNTRY_MISMATCH");
+  }
+
+  if (landParcel.status !== "available") {
+    throw new Error("LAND_PARCEL_NOT_AVAILABLE");
+  }
+
+  if (!isStarterBusinessZoningAllowed(landParcel.zoning)) {
+    throw new Error("ZONING_NOT_ALLOWED");
+  }
+
+  const premise = availablePremise ?? createPremiseFromLandParcel(input, landParcel, command.mode ?? "purchase");
+
+  if (premise.cityId !== city.id || premise.landParcelId !== landParcel.id) {
+    throw new Error("PREMISE_LAND_MISMATCH");
+  }
+
+  if (premise.status !== "available") {
+    throw new Error("PREMISE_NOT_AVAILABLE");
+  }
+
+  if (!isStarterBusinessZoningAllowed(premise.zoning)) {
+    throw new Error("ZONING_NOT_ALLOWED");
+  }
+
+  const acquisitionMode = command.mode ?? "purchase";
+  const initialCostMinor = sanitizeMoney(
+    acquisitionMode === "lease"
+      ? Math.max(premise.monthlyRentMinor, landParcel.monthlyRentMinor) + Math.max(premise.maintenanceMinorPerMonth, landParcel.maintenanceMinorPerMonth)
+      : Math.max(premise.purchasePriceMinor, landParcel.marketPriceMinor) + Math.max(premise.maintenanceMinorPerMonth, landParcel.maintenanceMinorPerMonth)
+  );
+  const monthlyObligationMinor = sanitizeMoney(
+    (acquisitionMode === "lease" ? Math.max(premise.monthlyRentMinor, landParcel.monthlyRentMinor) : 0) +
+      Math.max(premise.maintenanceMinorPerMonth, landParcel.maintenanceMinorPerMonth)
+  );
   const playerAccount = getSettlementAccount(input.bankAccounts, "player", command.playerId, company.currencyCode);
 
   if (!playerAccount) {
     throw new Error("PLAYER_ACCOUNT_NOT_FOUND");
   }
 
-  if (getAvailableCashMinor(playerAccount) < landCostMinor) {
+  if (getAvailableCashMinor(playerAccount) < initialCostMinor) {
     throw new Error("INSUFFICIENT_PLAYER_BALANCE");
   }
 
-  playerAccount.balanceMinor = sanitizeMoney(playerAccount.balanceMinor - landCostMinor);
+  playerAccount.balanceMinor = sanitizeMoney(playerAccount.balanceMinor - initialCostMinor);
+  landParcel.status = acquisitionMode === "lease" ? "leased" : "owned";
+  landParcel.ownerType = "company";
+  landParcel.ownerId = company.id;
 
   const starterWarehouse: MutableWarehouse = {
     id: `${input.seed}-warehouse-${input.tick}-${company.id}-starter`,
     companyId: company.id,
     cityId: city.id,
-    name: `${company.name} ${command.mode === "lease" ? "Leased" : "Starter"} Premise`,
-    warehouseType: "general",
-    capacity: 50_000,
-    handlingCostMinorPerUnit: 6
+    name: `${company.name} ${acquisitionMode === "lease" ? "Leased" : "Owned"} ${premise.name}`,
+    warehouseType: premise.premiseType === "farm" || premise.premiseType === "warehouse" ? "bulk" : "general",
+    capacity: premise.premiseType === "factory" ? 120_000 : premise.premiseType === "warehouse" ? 100_000 : 50_000,
+    handlingCostMinorPerUnit: premise.premiseType === "farm" ? 4 : 6
   };
+
+  premise.companyId = company.id;
+  premise.acquisitionMode = acquisitionMode;
+  premise.status = "active";
+  premise.warehouseId = starterWarehouse.id;
+  premise.acquiredTick = input.tick;
+  premise.leaseExpiresTick = acquisitionMode === "lease" ? input.tick + MONTHLY_TICK_INTERVAL * 12 : null;
+
   const wheatProduct = input.state.products.find((product) => product.name.toLocaleLowerCase() === "wheat") ?? null;
   const breadProduct = input.state.products.find((product) => product.name.toLocaleLowerCase() === "bread") ?? null;
   const starterProductionPlan: MutableProductionPlan | null =
@@ -3368,13 +3569,13 @@ function applyBuyLandCommand(input: ApplyAcceptedPlayerCommandInput, command: Ex
       {
         ownerType: "bank_account",
         ownerId: playerAccount.id,
-        amountMinor: -landCostMinor,
+        amountMinor: -initialCostMinor,
         currencyCode: company.currencyCode
       },
       {
         ownerType: "state",
-        ownerId: company.countryId,
-        amountMinor: landCostMinor,
+        ownerId: acquisitionMode === "lease" ? city.id : company.countryId,
+        amountMinor: initialCostMinor,
         currencyCode: company.currencyCode
       }
     ]
@@ -3383,27 +3584,46 @@ function applyBuyLandCommand(input: ApplyAcceptedPlayerCommandInput, command: Ex
     id: `${input.seed}-event-${input.tick}-${command.commandId}-premise-acquired`,
     tick: input.tick,
     type: "LandPremiseAcquiredEvent",
-    message: `${company.name} ${command.mode === "lease" ? "leased" : "bought"} a starter premise in ${city.name}.`,
-    entityIds: [company.id, city.id, starterWarehouse.id],
+    message: `${company.name} ${acquisitionMode === "lease" ? "leased" : "bought"} ${premise.name} in ${city.name}.`,
+    entityIds: [company.id, city.id, landParcel.id, premise.id, starterWarehouse.id],
     metadata: {
       commandId: command.commandId,
       companyId: company.id,
       cityId: city.id,
+      landParcelId: landParcel.id,
+      premiseId: premise.id,
       warehouseId: starterWarehouse.id,
       productionPlanId: starterProductionPlan?.id ?? "",
       retailOfferId: starterRetailOffer?.id ?? "",
-      costMinor: landCostMinor
+      acquisitionMode,
+      zoning: premise.zoning,
+      costMinor: initialCostMinor,
+      monthlyObligationMinor
     }
   });
   input.metrics.push({
     id: `${input.seed}-metric-${input.tick}-${command.commandId}-premise-cost`,
     tick: input.tick,
-    name: "land.premise.cost_minor",
-    value: landCostMinor,
+    name: "land.premise.initial_cost_minor",
+    value: initialCostMinor,
     tags: {
       companyId: company.id,
       cityId: city.id,
-      mode: command.mode ?? "purchase"
+      landParcelId: landParcel.id,
+      premiseId: premise.id,
+      mode: acquisitionMode,
+      zoning: premise.zoning
+    }
+  });
+  input.metrics.push({
+    id: `${input.seed}-metric-${input.tick}-${command.commandId}-premise-monthly-obligation`,
+    tick: input.tick,
+    name: "land.premise.monthly_obligation_minor",
+    value: monthlyObligationMinor,
+    tags: {
+      companyId: company.id,
+      premiseId: premise.id,
+      mode: acquisitionMode
     }
   });
   input.news.push({
@@ -3411,12 +3631,38 @@ function applyBuyLandCommand(input: ApplyAcceptedPlayerCommandInput, command: Ex
     tick: input.tick,
     category: "corporate",
     templateId: null,
-    headline: `${company.name} opens a starter premise`,
-    body: `A validated ${command.mode ?? "purchase"} command created the first warehouse, bread production plan, retail offer, and required starter license where applicable.`,
+    headline: `${company.name} opens ${premise.name}`,
+    body: `A validated ${acquisitionMode} command acquired a ${premise.zoning} premise, created an operational warehouse, and attached starter production/sales assets where allowed.`,
     severity: "info",
-    relatedEntityIds: [company.id, city.id, starterWarehouse.id],
+    relatedEntityIds: [company.id, city.id, landParcel.id, premise.id, starterWarehouse.id],
     reliabilityId: null
   });
+}
+
+function createPremiseFromLandParcel(input: ApplyAcceptedPlayerCommandInput, landParcel: MutableLandParcel, mode: "purchase" | "lease"): MutablePremise {
+  const premise: MutablePremise = {
+    id: `${input.seed}-premise-${input.tick}-${slugify(landParcel.id)}`,
+    landParcelId: landParcel.id,
+    cityId: landParcel.cityId,
+    companyId: null,
+    name: `${landParcel.name} ${mode === "lease" ? "Lease Unit" : "Buildable Unit"}`,
+    premiseType: landParcel.zoning === "agricultural" ? "farm" : landParcel.zoning === "industrial" ? "workshop" : "storefront",
+    acquisitionMode: "state_owned",
+    status: "available",
+    zoning: landParcel.zoning,
+    warehouseId: null,
+    purchasePriceMinor: landParcel.marketPriceMinor,
+    monthlyRentMinor: landParcel.monthlyRentMinor,
+    maintenanceMinorPerMonth: landParcel.maintenanceMinorPerMonth,
+    acquiredTick: null,
+    leaseExpiresTick: null
+  };
+  input.premises.push(premise);
+  return premise;
+}
+
+function isStarterBusinessZoningAllowed(zoning: LandParcel["zoning"]): boolean {
+  return zoning === "commercial" || zoning === "industrial" || zoning === "mixed";
 }
 
 function applyBuyResourceCommand(
@@ -4083,6 +4329,45 @@ function validateCommand(state: WorldState, command: PlayerCommand): RejectedCom
         commandId: command.commandId,
         code: "COMPANY_PREMISE_ALREADY_EXISTS",
         message: "The company already has a premise in this city."
+      };
+    }
+
+    const requestedPremise = state.premises.find((premise) => premise.id === (command.premiseId ?? command.lotId)) ?? null;
+    const requestedParcelId = command.landParcelId ?? requestedPremise?.landParcelId ?? command.lotId;
+    const requestedParcel = state.landParcels.find((parcel) => parcel.id === requestedParcelId) ?? null;
+    const candidatePremise = requestedPremise ?? state.premises.find((premise) => premise.cityId === city.id && premise.status === "available") ?? null;
+    const candidateParcel = requestedParcel ?? (candidatePremise ? state.landParcels.find((parcel) => parcel.id === candidatePremise.landParcelId) ?? null : null);
+
+    if (!candidatePremise && !candidateParcel) {
+      return {
+        commandId: command.commandId,
+        code: "LAND_OR_PREMISE_NOT_AVAILABLE",
+        message: "No available land parcel or premise was found for this command."
+      };
+    }
+
+    if (candidateParcel && (candidateParcel.cityId !== city.id || candidateParcel.countryId !== company.countryId)) {
+      return {
+        commandId: command.commandId,
+        code: "LAND_CITY_COUNTRY_MISMATCH",
+        message: "Selected land must be in the target city and company country."
+      };
+    }
+
+    if (candidateParcel && candidateParcel.status !== "available") {
+      return {
+        commandId: command.commandId,
+        code: "LAND_PARCEL_NOT_AVAILABLE",
+        message: "Selected land parcel is not available."
+      };
+    }
+
+    const zoning = candidatePremise?.zoning ?? candidateParcel?.zoning;
+    if (zoning && !isStarterBusinessZoningAllowed(zoning)) {
+      return {
+        commandId: command.commandId,
+        code: "ZONING_NOT_ALLOWED",
+        message: "The selected zoning does not allow the starter retail/food business."
       };
     }
 
@@ -10080,6 +10365,22 @@ function normalizeWorldState(state: WorldState): WorldState {
       ...city,
       populationTotal: sanitizeQuantity(city.populationTotal),
       infrastructureScore: clamp(city.infrastructureScore, 0, 1)
+    })),
+    landParcels: (state.landParcels ?? []).map((parcel) => ({
+      ...parcel,
+      marketPriceMinor: sanitizeMoney(parcel.marketPriceMinor ?? 0),
+      monthlyRentMinor: sanitizeMoney(parcel.monthlyRentMinor ?? 0),
+      maintenanceMinorPerMonth: sanitizeMoney(parcel.maintenanceMinorPerMonth ?? 0),
+      infrastructureScore: clamp(parcel.infrastructureScore ?? 0, 0, 1),
+      allowedBusinessTypes: parcel.allowedBusinessTypes ?? []
+    })),
+    premises: (state.premises ?? []).map((premise) => ({
+      ...premise,
+      purchasePriceMinor: sanitizeMoney(premise.purchasePriceMinor ?? 0),
+      monthlyRentMinor: sanitizeMoney(premise.monthlyRentMinor ?? 0),
+      maintenanceMinorPerMonth: sanitizeMoney(premise.maintenanceMinorPerMonth ?? 0),
+      acquiredTick: premise.acquiredTick === null || premise.acquiredTick === undefined ? null : sanitizeQuantity(premise.acquiredTick),
+      leaseExpiresTick: premise.leaseExpiresTick === null || premise.leaseExpiresTick === undefined ? null : sanitizeQuantity(premise.leaseExpiresTick)
     })),
     warehouses: (state.warehouses ?? []).map((warehouse) => ({
       ...warehouse,

@@ -14,10 +14,10 @@ This file is the short operational queue for autonomous vertical slices.
 - [x] `P1-TASK-20260524-0032-player-resource-logistics-delivery-loop.md` - player resource purchases now support pickup/direct and shipment delivery modes; in-transit resources cannot be used for production until delivered.
 - [x] `P1-TASK-20260524-0033-player-margin-accounting.md` - player operations now track lot-level cost basis, production cost allocation, retail COGS, gross margin, cash delta, and P&L UI.
 - [x] `P1-TASK-20260524-0034-first-business-onboarding-ui.md` - Player Operations now has a guided First Business stepper, disabled-state reasons, action result drawer, map highlights, and What changed this tick summaries.
+- [x] `P1-TASK-20260524-0035-land-premise-lease-model.md` - land parcels and premises are now distinct domain/read-model entities with zoning, purchase/lease economics, recurring rent/maintenance, and UI premise selection.
 
 ## Next
 
-1. `P1-TASK-20260524-0035-land-premise-lease-model.md` - split land, premise/building, lease and purchase into a clearer domain model.
-2. `P1-TASK-20260524-0036-seed-scale-balance-v1.md` - expand the seed world toward prototype scale after player-loop accounting is stable.
-3. `P1-TASK-20260524-0030-browser-e2e-command-player-loop.md` - cover the guided player loop with browser-level regression tests.
-4. `P2-TASK-operation-analytics` - chart resource spend, production output, retail revenue, and margin after player sales.
+1. `P1-TASK-20260524-0036-seed-scale-balance-v1.md` - expand the seed world toward prototype scale after player-loop accounting is stable.
+2. `P1-TASK-20260524-0030-browser-e2e-command-player-loop.md` - cover the guided player loop with browser-level regression tests.
+3. `P2-TASK-operation-analytics` - chart resource spend, production output, retail revenue, and margin after player sales.

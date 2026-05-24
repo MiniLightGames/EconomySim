@@ -190,6 +190,47 @@ export interface Warehouse {
   readonly handlingCostMinorPerUnit: number;
 }
 
+export type LandZoning = "commercial" | "industrial" | "agricultural" | "residential" | "mixed";
+export type LandOwnerType = "state" | "city" | "company" | "npc";
+export type LandParcelStatus = "available" | "owned" | "leased" | "reserved";
+export type PremiseType = "storefront" | "workshop" | "warehouse" | "farm" | "factory";
+export type PremiseStatus = "available" | "active" | "under_construction" | "archived";
+export type PremiseAcquisitionMode = "purchase" | "lease" | "state_owned";
+
+export interface LandParcel {
+  readonly id: EntityId;
+  readonly cityId: EntityId;
+  readonly countryId: EntityId;
+  readonly name: string;
+  readonly zoning: LandZoning;
+  readonly ownerType: LandOwnerType;
+  readonly ownerId: EntityId;
+  readonly status: LandParcelStatus;
+  readonly marketPriceMinor: number;
+  readonly monthlyRentMinor: number;
+  readonly maintenanceMinorPerMonth: number;
+  readonly infrastructureScore: number;
+  readonly allowedBusinessTypes: readonly string[];
+}
+
+export interface Premise {
+  readonly id: EntityId;
+  readonly landParcelId: EntityId;
+  readonly cityId: EntityId;
+  readonly companyId: EntityId | null;
+  readonly name: string;
+  readonly premiseType: PremiseType;
+  readonly acquisitionMode: PremiseAcquisitionMode;
+  readonly status: PremiseStatus;
+  readonly zoning: LandZoning;
+  readonly warehouseId: EntityId | null;
+  readonly purchasePriceMinor: number;
+  readonly monthlyRentMinor: number;
+  readonly maintenanceMinorPerMonth: number;
+  readonly acquiredTick: number | null;
+  readonly leaseExpiresTick: number | null;
+}
+
 export interface InventoryLot {
   readonly id: EntityId;
   readonly warehouseId: EntityId;
@@ -1491,6 +1532,8 @@ export interface WorldState {
   readonly illegalContracts: readonly IllegalContract[];
   readonly populationCohorts: readonly PopulationCohort[];
   readonly contracts: readonly Contract[];
+  readonly landParcels: readonly LandParcel[];
+  readonly premises: readonly Premise[];
   readonly warehouses: readonly Warehouse[];
   readonly inventoryLots: readonly InventoryLot[];
   readonly shipments: readonly Shipment[];
@@ -1542,6 +1585,8 @@ export interface BuyLandCommand extends PlayerCommandBatchDependencyHints {
   readonly companyId: EntityId;
   readonly cityId: EntityId;
   readonly lotId: EntityId;
+  readonly landParcelId?: EntityId;
+  readonly premiseId?: EntityId;
   readonly mode?: "purchase" | "lease";
 }
 
@@ -1601,7 +1646,8 @@ export const ECONOMY_INVARIANTS = [
   "Public statistics carry reliability and manipulation-risk metadata.",
   "Important actions create audit log records, events, and metrics.",
   "Player command records link idempotency keys to resulting events, metrics, and financial transactions.",
-  "Dependent command batches resolve temporary references through deterministic command results before a tick mutates world state."
+  "Dependent command batches resolve temporary references through deterministic command results before a tick mutates world state.",
+  "Land, premises, leases, and warehouses are distinct state entities; zoning and recurring costs gate business operations."
 ] as const;
 
 export function createInitialWorldState(seed = "demo"): WorldState {
@@ -2982,6 +3028,106 @@ export function createInitialWorldState(seed = "demo"): WorldState {
       }
     ],
     contracts: [],
+    landParcels: [
+      {
+        id: `${seed}-land-harborview-commercial-1`,
+        cityId: `${seed}-city-harborview`,
+        countryId: `${seed}-country-north-coast`,
+        name: "Harborview Small Commercial Plot",
+        zoning: "commercial",
+        ownerType: "city",
+        ownerId: `${seed}-city-harborview`,
+        status: "available",
+        marketPriceMinor: 750_000,
+        monthlyRentMinor: 150_000,
+        maintenanceMinorPerMonth: 18_000,
+        infrastructureScore: 0.82,
+        allowedBusinessTypes: ["retail", "food", "warehouse"]
+      },
+      {
+        id: `${seed}-land-harborview-industrial-1`,
+        cityId: `${seed}-city-harborview`,
+        countryId: `${seed}-country-north-coast`,
+        name: "Harborview Light Industrial Unit",
+        zoning: "industrial",
+        ownerType: "city",
+        ownerId: `${seed}-city-harborview`,
+        status: "available",
+        marketPriceMinor: 1_250_000,
+        monthlyRentMinor: 220_000,
+        maintenanceMinorPerMonth: 32_000,
+        infrastructureScore: 0.76,
+        allowedBusinessTypes: ["production", "warehouse", "food"]
+      },
+      {
+        id: `${seed}-land-grainford-agri-1`,
+        cityId: `${seed}-city-grainford`,
+        countryId: `${seed}-country-north-coast`,
+        name: "Grainford Agricultural Lease Block",
+        zoning: "agricultural",
+        ownerType: "city",
+        ownerId: `${seed}-city-grainford`,
+        status: "available",
+        marketPriceMinor: 520_000,
+        monthlyRentMinor: 90_000,
+        maintenanceMinorPerMonth: 14_000,
+        infrastructureScore: 0.61,
+        allowedBusinessTypes: ["agriculture", "food", "warehouse"]
+      }
+    ],
+    premises: [
+      {
+        id: `${seed}-premise-harborview-commercial-1`,
+        landParcelId: `${seed}-land-harborview-commercial-1`,
+        cityId: `${seed}-city-harborview`,
+        companyId: null,
+        name: "Harborview Starter Food Shop",
+        premiseType: "storefront",
+        acquisitionMode: "state_owned",
+        status: "available",
+        zoning: "commercial",
+        warehouseId: null,
+        purchasePriceMinor: 750_000,
+        monthlyRentMinor: 150_000,
+        maintenanceMinorPerMonth: 18_000,
+        acquiredTick: null,
+        leaseExpiresTick: null
+      },
+      {
+        id: `${seed}-premise-harborview-industrial-1`,
+        landParcelId: `${seed}-land-harborview-industrial-1`,
+        cityId: `${seed}-city-harborview`,
+        companyId: null,
+        name: "Harborview Starter Bakery Workshop",
+        premiseType: "workshop",
+        acquisitionMode: "state_owned",
+        status: "available",
+        zoning: "industrial",
+        warehouseId: null,
+        purchasePriceMinor: 1_250_000,
+        monthlyRentMinor: 220_000,
+        maintenanceMinorPerMonth: 32_000,
+        acquiredTick: null,
+        leaseExpiresTick: null
+      },
+      {
+        id: `${seed}-premise-grainford-agri-1`,
+        landParcelId: `${seed}-land-grainford-agri-1`,
+        cityId: `${seed}-city-grainford`,
+        companyId: null,
+        name: "Grainford Starter Agricultural Shed",
+        premiseType: "farm",
+        acquisitionMode: "state_owned",
+        status: "available",
+        zoning: "agricultural",
+        warehouseId: null,
+        purchasePriceMinor: 520_000,
+        monthlyRentMinor: 90_000,
+        maintenanceMinorPerMonth: 14_000,
+        acquiredTick: null,
+        leaseExpiresTick: null
+      }
+    ],
     warehouses: [
       {
         id: `${seed}-warehouse-harbor-bakery`,

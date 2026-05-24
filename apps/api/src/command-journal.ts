@@ -27,6 +27,8 @@ export interface CommandExecutionResult {
   readonly rejectionCode: string | null;
   readonly rejectionMessage: string | null;
   readonly createdCompanyId: string | null;
+  readonly landParcelId: string | null;
+  readonly premiseId: string | null;
   readonly warehouseId: string | null;
   readonly productionPlanId: string | null;
   readonly retailOfferId: string | null;
@@ -749,6 +751,8 @@ function buildCommandResults(state: WorldState, records: readonly PlayerCommandR
       rejectionCode: record.rejectionCode,
       rejectionMessage: record.rejectionMessage,
       createdCompanyId: readMetadataString(companyEvent, "companyId"),
+      landParcelId: readMetadataString(premiseEvent, "landParcelId"),
+      premiseId: readMetadataString(premiseEvent, "premiseId"),
       warehouseId: readMetadataString(premiseEvent, "warehouseId"),
       productionPlanId: readMetadataString(premiseEvent, "productionPlanId"),
       retailOfferId: readMetadataString(premiseEvent, "retailOfferId"),
@@ -840,7 +844,7 @@ function collectTemporaryReferences(command: PlayerCommand): readonly string[] {
   const candidates: string[] = [];
 
   if (command.type === "BuyLandCommand") {
-    candidates.push(command.companyId);
+    candidates.push(command.companyId, command.landParcelId ?? "", command.premiseId ?? "");
   }
 
   if (command.type === "BuyResourceCommand") {
@@ -860,7 +864,12 @@ function collectTemporaryReferences(command: PlayerCommand): readonly string[] {
 
 function resolveCommandReferences(command: PlayerCommand, refs: Readonly<Record<string, string>>): PlayerCommand {
   if (command.type === "BuyLandCommand") {
-    return { ...command, companyId: resolveMaybeRef(command.companyId, refs) };
+    return {
+      ...command,
+      companyId: resolveMaybeRef(command.companyId, refs),
+      landParcelId: command.landParcelId ? resolveMaybeRef(command.landParcelId, refs) : undefined,
+      premiseId: command.premiseId ? resolveMaybeRef(command.premiseId, refs) : undefined
+    };
   }
 
   if (command.type === "BuyResourceCommand") {
