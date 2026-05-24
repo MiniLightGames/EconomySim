@@ -28,6 +28,14 @@ export function badRequest(code: string, message: string, details?: unknown): Ap
   return new ApiError(400, code, message, details);
 }
 
+export function unauthorized(code: string, message: string, details?: unknown): ApiError {
+  return new ApiError(401, code, message, details);
+}
+
+export function forbidden(code: string, message: string, details?: unknown): ApiError {
+  return new ApiError(403, code, message, details);
+}
+
 export function toErrorBody(code: string, message: string, details?: unknown): ApiErrorBody {
   return {
     error: {

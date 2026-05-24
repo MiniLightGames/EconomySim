@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ApiError = void 0;
 exports.notFound = notFound;
 exports.badRequest = badRequest;
+exports.unauthorized = unauthorized;
+exports.forbidden = forbidden;
 exports.toErrorBody = toErrorBody;
 exports.apiErrorHandler = apiErrorHandler;
 const zod_1 = require("zod");
@@ -23,6 +25,12 @@ function notFound(code, message, details) {
 }
 function badRequest(code, message, details) {
     return new ApiError(400, code, message, details);
+}
+function unauthorized(code, message, details) {
+    return new ApiError(401, code, message, details);
+}
+function forbidden(code, message, details) {
+    return new ApiError(403, code, message, details);
 }
 function toErrorBody(code, message, details) {
     return {

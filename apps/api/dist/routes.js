@@ -37,7 +37,10 @@ async function registerRoutes(app, dependencies) {
             lastNews: state.news.at(-1) ?? null
         };
     });
-    app.get("/persistence/consistency", async () => store.consistencyStatus());
+    app.get("/persistence/consistency", async (request) => {
+        (0, auth_1.requireRole)(request, ["developer", "admin"]);
+        return store.consistencyStatus();
+    });
     app.get("/countries", async () => {
         const state = await store.loadWorld();
         return state.countries;
@@ -732,11 +735,13 @@ async function registerRoutes(app, dependencies) {
             news: execution.state.news.filter((item) => item.tick === execution.state.currentTick)
         };
     });
-    app.get("/commands", async () => {
+    app.get("/commands", async (request) => {
+        (0, auth_1.requireRole)(request, ["developer", "admin"]);
         const state = await store.loadWorld();
         return state.playerCommands ?? [];
     });
-    app.get("/audit-logs", async () => {
+    app.get("/audit-logs", async (request) => {
+        (0, auth_1.requireRole)(request, ["developer", "admin"]);
         const state = await store.loadWorld();
         return state.auditLogs ?? [];
     });

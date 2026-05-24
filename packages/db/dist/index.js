@@ -40,6 +40,7 @@ exports.PERSISTENCE_CONTRACT_NOTES = [
     "Consistency status must expose snapshot tick vs normalized latest tick for API health, debugging, and recovery decisions.",
     "Every player command stores idempotency key, lifecycle status, and links to resulting events, metrics, and financial transactions.",
     "All command writes must be executed inside a Prisma transaction boundary before the snapshot is appended.",
-    "Auth binds user -> session -> player on the backend; request bodies are not trusted for playerId."
+    "Auth binds user -> session -> player on the backend; request bodies and identity headers are not trusted for playerId.",
+    "RBAC starts with player, developer, and admin roles; developer/admin gates protect debug, rollback, snapshot, and constructor-publish operations."
 ];
 //# sourceMappingURL=index.js.map

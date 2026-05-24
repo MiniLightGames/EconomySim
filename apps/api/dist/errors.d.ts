@@ -15,6 +15,8 @@ export declare class ApiError extends Error {
 }
 export declare function notFound(code: string, message: string, details?: unknown): ApiError;
 export declare function badRequest(code: string, message: string, details?: unknown): ApiError;
+export declare function unauthorized(code: string, message: string, details?: unknown): ApiError;
+export declare function forbidden(code: string, message: string, details?: unknown): ApiError;
 export declare function toErrorBody(code: string, message: string, details?: unknown): ApiErrorBody;
 export declare function apiErrorHandler(error: FastifyError | ApiError | ZodError, _request: FastifyRequest, reply: FastifyReply): unknown;
 //# sourceMappingURL=errors.d.ts.map

@@ -34,7 +34,7 @@ import {
   voteBodySchema
 } from "./schemas";
 import type { WorldStore } from "./store";
-import { bindCommandToSession, resolvePlayerSession } from "./auth";
+import { bindCommandToSession, requireRole, resolvePlayerSession } from "./auth";
 import { resolveIdempotencyKey, runJournaledCommand, runJournaledCommandBatch } from "./command-journal";
 
 export interface RouteDependencies {
@@ -77,7 +77,10 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
     };
   });
 
-  app.get("/persistence/consistency", async () => store.consistencyStatus());
+  app.get("/persistence/consistency", async (request) => {
+    requireRole(request, ["developer", "admin"]);
+    return store.consistencyStatus();
+  });
 
   app.get("/countries", async () => {
     const state = await store.loadWorld();
@@ -917,12 +920,14 @@ export async function registerRoutes(app: FastifyInstance, dependencies: RouteDe
     };
   });
 
-  app.get("/commands", async () => {
+  app.get("/commands", async (request) => {
+    requireRole(request, ["developer", "admin"]);
     const state = await store.loadWorld();
     return state.playerCommands ?? [];
   });
 
-  app.get("/audit-logs", async () => {
+  app.get("/audit-logs", async (request) => {
+    requireRole(request, ["developer", "admin"]);
     const state = await store.loadWorld();
     return state.auditLogs ?? [];
   });

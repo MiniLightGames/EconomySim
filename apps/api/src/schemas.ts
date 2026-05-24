@@ -19,7 +19,6 @@ export const landPurchaseBodySchema = z.object({
 export const createCompanyCommandSchema = z.object({
   type: z.literal("CreateCompanyCommand"),
   commandId: z.string().trim().min(1).max(160),
-  playerId: z.string().trim().min(1).max(128).optional(),
   countryId: z.string().trim().min(1).max(160),
   name: z.string().trim().min(2).max(80)
 });
@@ -27,7 +26,6 @@ export const createCompanyCommandSchema = z.object({
 export const buyLandCommandSchema = z.object({
   type: z.literal("BuyLandCommand"),
   commandId: z.string().trim().min(1).max(160),
-  playerId: z.string().trim().min(1).max(128).optional(),
   companyId: z.string().trim().min(1).max(160),
   cityId: z.string().trim().min(1).max(160),
   lotId: z.string().trim().min(1).max(160),
@@ -37,7 +35,6 @@ export const buyLandCommandSchema = z.object({
 export const buyResourceCommandSchema = z.object({
   type: z.literal("BuyResourceCommand"),
   commandId: z.string().trim().min(1).max(160),
-  playerId: z.string().trim().min(1).max(128).optional(),
   buyerCompanyId: z.string().trim().min(1).max(160),
   resourceOfferId: z.string().trim().min(1).max(160),
   quantity: z.number().int().positive().max(1_000_000_000),
@@ -48,7 +45,6 @@ export const buyResourceCommandSchema = z.object({
 export const runManualProductionCommandSchema = z.object({
   type: z.literal("RunManualProductionCommand"),
   commandId: z.string().trim().min(1).max(160),
-  playerId: z.string().trim().min(1).max(128).optional(),
   companyId: z.string().trim().min(1).max(160),
   productionPlanId: z.string().trim().min(1).max(160),
   requestedQuantity: z.number().int().positive().max(1_000_000_000)
@@ -57,7 +53,6 @@ export const runManualProductionCommandSchema = z.object({
 export const setRetailPriceCommandSchema = z.object({
   type: z.literal("SetRetailPriceCommand"),
   commandId: z.string().trim().min(1).max(160),
-  playerId: z.string().trim().min(1).max(128).optional(),
   companyId: z.string().trim().min(1).max(160),
   productId: z.string().trim().min(1).max(160),
   priceMinor: z.number().int().positive().max(1_000_000_000),

@@ -18,14 +18,12 @@ exports.landPurchaseBodySchema = zod_1.z.object({
 exports.createCompanyCommandSchema = zod_1.z.object({
     type: zod_1.z.literal("CreateCompanyCommand"),
     commandId: zod_1.z.string().trim().min(1).max(160),
-    playerId: zod_1.z.string().trim().min(1).max(128).optional(),
     countryId: zod_1.z.string().trim().min(1).max(160),
     name: zod_1.z.string().trim().min(2).max(80)
 });
 exports.buyLandCommandSchema = zod_1.z.object({
     type: zod_1.z.literal("BuyLandCommand"),
     commandId: zod_1.z.string().trim().min(1).max(160),
-    playerId: zod_1.z.string().trim().min(1).max(128).optional(),
     companyId: zod_1.z.string().trim().min(1).max(160),
     cityId: zod_1.z.string().trim().min(1).max(160),
     lotId: zod_1.z.string().trim().min(1).max(160),
@@ -34,7 +32,6 @@ exports.buyLandCommandSchema = zod_1.z.object({
 exports.buyResourceCommandSchema = zod_1.z.object({
     type: zod_1.z.literal("BuyResourceCommand"),
     commandId: zod_1.z.string().trim().min(1).max(160),
-    playerId: zod_1.z.string().trim().min(1).max(128).optional(),
     buyerCompanyId: zod_1.z.string().trim().min(1).max(160),
     resourceOfferId: zod_1.z.string().trim().min(1).max(160),
     quantity: zod_1.z.number().int().positive().max(1_000_000_000),
@@ -44,7 +41,6 @@ exports.buyResourceCommandSchema = zod_1.z.object({
 exports.runManualProductionCommandSchema = zod_1.z.object({
     type: zod_1.z.literal("RunManualProductionCommand"),
     commandId: zod_1.z.string().trim().min(1).max(160),
-    playerId: zod_1.z.string().trim().min(1).max(128).optional(),
     companyId: zod_1.z.string().trim().min(1).max(160),
     productionPlanId: zod_1.z.string().trim().min(1).max(160),
     requestedQuantity: zod_1.z.number().int().positive().max(1_000_000_000)
@@ -52,7 +48,6 @@ exports.runManualProductionCommandSchema = zod_1.z.object({
 exports.setRetailPriceCommandSchema = zod_1.z.object({
     type: zod_1.z.literal("SetRetailPriceCommand"),
     commandId: zod_1.z.string().trim().min(1).max(160),
-    playerId: zod_1.z.string().trim().min(1).max(128).optional(),
     companyId: zod_1.z.string().trim().min(1).max(160),
     productId: zod_1.z.string().trim().min(1).max(160),
     priceMinor: zod_1.z.number().int().positive().max(1_000_000_000),

@@ -16,10 +16,12 @@ export interface LedgerValidationResult {
 export declare const DB_INVARIANTS: readonly ["Ledger entries must balance to zero per currency.", "Every command that changes durable state must be auditable.", "World events, metrics, and snapshots are append-only operational records."];
 export declare function validateLedgerTransaction(transaction: LedgerTransactionInput): LedgerValidationResult;
 export declare function assertLedgerTransactionBalanced(transaction: LedgerTransactionInput): void;
+export type AuthRole = "player" | "developer" | "admin";
 export interface AuthUserRecord {
     readonly id: string;
     readonly email: string | null;
     readonly displayName: string;
+    readonly role: AuthRole;
 }
 export interface PlayerRecord {
     readonly id: string;
@@ -30,6 +32,14 @@ export interface SessionRecord {
     readonly id: string;
     readonly userId: string;
     readonly playerId: string;
+    readonly expiresAt: Date;
+    readonly revokedAt: Date | null;
+}
+export interface AuthSessionBinding {
+    readonly userId: string;
+    readonly sessionId: string;
+    readonly playerId: string;
+    readonly roles: readonly AuthRole[];
     readonly expiresAt: Date;
 }
 export type PlayerCommandRecordStatus = "received" | "validated" | "accepted" | "rejected" | "applied" | "failed";
@@ -109,5 +119,5 @@ export interface WorldPersistenceContract {
         readonly financialTransactionIds: readonly string[];
     }): Promise<void>;
 }
-export declare const PERSISTENCE_CONTRACT_NOTES: readonly ["Snapshots remain the rollback safety layer, not the primary read path for the player operations loop.", "Companies, accounts, warehouses, production plans, offers, inventory lots, command records, audit logs, events, metrics, news, explanations, and financial transactions are durable normalized rows.", "Prisma reads hydrate the key player loop from normalized tables and merge it over the latest snapshot fallback.", "Consistency status must expose snapshot tick vs normalized latest tick for API health, debugging, and recovery decisions.", "Every player command stores idempotency key, lifecycle status, and links to resulting events, metrics, and financial transactions.", "All command writes must be executed inside a Prisma transaction boundary before the snapshot is appended.", "Auth binds user -> session -> player on the backend; request bodies are not trusted for playerId."];
+export declare const PERSISTENCE_CONTRACT_NOTES: readonly ["Snapshots remain the rollback safety layer, not the primary read path for the player operations loop.", "Companies, accounts, warehouses, production plans, offers, inventory lots, command records, audit logs, events, metrics, news, explanations, and financial transactions are durable normalized rows.", "Prisma reads hydrate the key player loop from normalized tables and merge it over the latest snapshot fallback.", "Consistency status must expose snapshot tick vs normalized latest tick for API health, debugging, and recovery decisions.", "Every player command stores idempotency key, lifecycle status, and links to resulting events, metrics, and financial transactions.", "All command writes must be executed inside a Prisma transaction boundary before the snapshot is appended.", "Auth binds user -> session -> player on the backend; request bodies and identity headers are not trusted for playerId.", "RBAC starts with player, developer, and admin roles; developer/admin gates protect debug, rollback, snapshot, and constructor-publish operations."];
 //# sourceMappingURL=index.d.ts.map

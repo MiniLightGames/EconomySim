@@ -8,6 +8,10 @@ function idem(key: string): Record<string, string> {
   return { "Idempotency-Key": key };
 }
 
+function devAuth(): Record<string, string> {
+  return { Authorization: "Bearer dev-developer-session" };
+}
+
 describe("Fastify API integration", () => {
   let app: FastifyInstance;
 
@@ -25,7 +29,7 @@ describe("Fastify API integration", () => {
 
   it("returns health and persistence consistency status", async () => {
     const response = await app.inject({ method: "GET", url: "/health" });
-    const consistencyResponse = await app.inject({ method: "GET", url: "/persistence/consistency" });
+    const consistencyResponse = await app.inject({ method: "GET", url: "/persistence/consistency", headers: devAuth() });
     const body = response.json();
 
     expect(response.statusCode).toBe(200);
@@ -77,7 +81,6 @@ describe("Fastify API integration", () => {
       url: "/companies",
       headers: idem("test-create-company"),
       payload: {
-        playerId: "player-1",
         countryId: "api-test-country-north-coast",
         name: "Player Foods"
       }
@@ -97,7 +100,6 @@ describe("Fastify API integration", () => {
 
   it("records player commands, enforces idempotency, and writes audit logs", async () => {
     const payload = {
-      playerId: "forged-player",
       countryId: "api-test-country-north-coast",
       name: "Idempotent Foods"
     };
@@ -113,8 +115,8 @@ describe("Fastify API integration", () => {
       headers: idem("idempotent-company-create"),
       payload
     });
-    const commandsResponse = await app.inject({ method: "GET", url: "/commands" });
-    const auditResponse = await app.inject({ method: "GET", url: "/audit-logs" });
+    const commandsResponse = await app.inject({ method: "GET", url: "/commands", headers: devAuth() });
+    const auditResponse = await app.inject({ method: "GET", url: "/audit-logs", headers: devAuth() });
     const companiesResponse = await app.inject({ method: "GET", url: "/companies" });
     const companies = companiesResponse.json().filter((company: { name: string }) => company.name === "Idempotent Foods");
 
@@ -127,8 +129,7 @@ describe("Fastify API integration", () => {
           idempotencyKey: "idempotent-company-create",
           status: "applied",
           commandType: "CreateCompanyCommand",
-          playerId: "player-1",
-          resultEventIds: expect.arrayContaining([expect.stringContaining("company-registered")]),
+            resultEventIds: expect.arrayContaining([expect.stringContaining("company-registered")]),
           resultMetricIds: expect.arrayContaining([expect.stringContaining("company-created")])
         })
       ])
@@ -150,7 +151,6 @@ describe("Fastify API integration", () => {
       url: "/companies",
       headers: idem("vertical-create-company"),
       payload: {
-        playerId: "player-1",
         countryId: "api-test-country-north-coast",
         name: "Player Operations"
       }
@@ -161,7 +161,6 @@ describe("Fastify API integration", () => {
       url: "/land/purchase",
       headers: idem("vertical-buy-land"),
       payload: {
-        playerId: "player-1",
         companyId: company.id,
         cityId: "api-test-city-harborview",
         lotId: "api-test-harborview-starter-premise",
@@ -187,7 +186,6 @@ describe("Fastify API integration", () => {
       url: "/resources/purchase",
       headers: idem("vertical-buy-wheat"),
       payload: {
-        playerId: "player-1",
         buyerCompanyId: company.id,
         buyerWarehouseId: warehouse.id,
         resourceOfferId: offer.id,
@@ -202,7 +200,6 @@ describe("Fastify API integration", () => {
       url: "/production/run",
       headers: idem("vertical-run-production"),
       payload: {
-        playerId: "player-1",
         companyId: company.id,
         productionPlanId: plan.id,
         requestedQuantity: 500
@@ -243,7 +240,6 @@ describe("Fastify API integration", () => {
       url: `/retail/offers/${retailOffer.id}/price`,
       headers: idem("vertical-set-price"),
       payload: {
-        playerId: "player-1",
         companyId: company.id,
         priceMinor: 250,
         currencyCode: "NCR"
@@ -274,12 +270,44 @@ describe("Fastify API integration", () => {
     expect(updatedCompany.cashBalanceMinor).toBeGreaterThan(0);
   });
 
+  it("rejects forged player identity in headers and bodies", async () => {
+    const headerResponse = await app.inject({
+      method: "POST",
+      url: "/companies",
+      headers: { ...idem("forged-header"), "x-economysim-player-id": "attacker-player" },
+      payload: {
+        countryId: "api-test-country-north-coast",
+        name: "Header Forgery Foods"
+      }
+    });
+    const bodyResponse = await app.inject({
+      method: "POST",
+      url: "/companies",
+      headers: idem("forged-body"),
+      payload: {
+        playerId: "attacker-player",
+        countryId: "api-test-country-north-coast",
+        name: "Body Forgery Foods"
+      }
+    });
+    const commandsResponse = await app.inject({
+      method: "GET",
+      url: "/commands"
+    });
+
+    expect(headerResponse.statusCode).toBe(400);
+    expect(headerResponse.json().error.code).toBe("FORGED_IDENTITY_HEADER");
+    expect(bodyResponse.statusCode).toBe(400);
+    expect(bodyResponse.json().error.code).toBe("FORGED_PLAYER_ID_BODY");
+    expect(commandsResponse.statusCode).toBe(403);
+    expect(commandsResponse.json().error.code).toBe("RBAC_FORBIDDEN");
+  });
+
   it("rejects invalid company creation payloads", async () => {
     const response = await app.inject({
       method: "POST",
       url: "/companies",
       payload: {
-        playerId: "",
         countryId: "api-test-country-north-coast",
         name: "A"
       }
@@ -295,7 +323,6 @@ describe("Fastify API integration", () => {
       url: "/companies",
       headers: idem("missing-country-create"),
       payload: {
-        playerId: "player-1",
         countryId: "missing-country",
         name: "Nowhere Foods"
       }
@@ -623,7 +650,6 @@ describe("Fastify API integration", () => {
       method: "POST",
       url: "/lobbying",
       payload: {
-        playerId: "player-1",
         countryId: "api-test-country-north-coast",
         targetPartyId: "api-test-party-civic-growth",
         lawType: "deposit_insurance",
@@ -634,7 +660,6 @@ describe("Fastify API integration", () => {
       method: "POST",
       url: "/media-campaigns",
       payload: {
-        playerId: "player-1",
         countryId: "api-test-country-north-coast",
         targetPartyId: "api-test-party-civic-growth",
         message: "Stable banks, stable households.",
@@ -656,7 +681,6 @@ describe("Fastify API integration", () => {
       method: "POST",
       url: "/vote",
       payload: {
-        playerId: "player-1",
         countryId: "api-test-country-north-coast",
         partyId: "api-test-party-labor-commons",
         choice: "for"
@@ -665,8 +689,8 @@ describe("Fastify API integration", () => {
     const rejectedResponse = await app.inject({
       method: "POST",
       url: "/vote",
+      headers: { Authorization: "Bearer dev-no-assets-session" },
       payload: {
-        playerId: "no-assets",
         countryId: "api-test-country-north-coast",
         partyId: "api-test-party-labor-commons",
         choice: "for"
@@ -808,8 +832,7 @@ describe("Fastify API integration", () => {
           {
             type: "BuyLandCommand",
             commandId: "cmd-1",
-            playerId: "player-1",
-            companyId: "api-test-company-harbor-bakery",
+                companyId: "api-test-company-harbor-bakery",
             cityId: "missing-city",
             lotId: "lot-1"
           }

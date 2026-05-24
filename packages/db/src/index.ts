@@ -55,10 +55,13 @@ export function assertLedgerTransactionBalanced(transaction: LedgerTransactionIn
   }
 }
 
+export type AuthRole = "player" | "developer" | "admin";
+
 export interface AuthUserRecord {
   readonly id: string;
   readonly email: string | null;
   readonly displayName: string;
+  readonly role: AuthRole;
 }
 
 export interface PlayerRecord {
@@ -71,6 +74,15 @@ export interface SessionRecord {
   readonly id: string;
   readonly userId: string;
   readonly playerId: string;
+  readonly expiresAt: Date;
+  readonly revokedAt: Date | null;
+}
+
+export interface AuthSessionBinding {
+  readonly userId: string;
+  readonly sessionId: string;
+  readonly playerId: string;
+  readonly roles: readonly AuthRole[];
   readonly expiresAt: Date;
 }
 
@@ -163,5 +175,6 @@ export const PERSISTENCE_CONTRACT_NOTES = [
   "Consistency status must expose snapshot tick vs normalized latest tick for API health, debugging, and recovery decisions.",
   "Every player command stores idempotency key, lifecycle status, and links to resulting events, metrics, and financial transactions.",
   "All command writes must be executed inside a Prisma transaction boundary before the snapshot is appended.",
-  "Auth binds user -> session -> player on the backend; request bodies are not trusted for playerId."
+  "Auth binds user -> session -> player on the backend; request bodies and identity headers are not trusted for playerId.",
+  "RBAC starts with player, developer, and admin roles; developer/admin gates protect debug, rollback, snapshot, and constructor-publish operations."
 ] as const;
